@@ -152,7 +152,7 @@ async def create_forecast_job(
         symbol=symbol,
         forecast_horizon=forecast_horizon,
         model_type=model_type,
-        metadata=metadata
+        job_metadata=job_metadata
     )
     db.add(job)
     await db.commit()
@@ -204,7 +204,7 @@ async def save_model_performance(
         mae=mae,
         rmse=rmse,
         directional_accuracy=directional_accuracy,
-        metadata=metadata
+        model_metadata=model_metadata
     )
     db.add(performance)
     await db.commit()
