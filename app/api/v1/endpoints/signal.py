@@ -8,6 +8,10 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from structlog import get_logger
+
+from app.api.v1.endpoints.models import get_health_engine
+from app.services.kline_store import INTERVAL_MS
 from app.services.signal_service import (
     CANDLE_LIMIT,
     INTERVAL,
@@ -19,6 +23,7 @@ from app.services.signal_service import (
     normalize_pair,
 )
 
+logger = get_logger()
 router = APIRouter()
 
 
@@ -46,6 +51,7 @@ async def get_signal(
     pair: str,
     source: CandleSource = Depends(get_candle_source),
     predictor=Depends(get_predictor),
+    health_engine=Depends(get_health_engine),
 ) -> SignalResponse:
     symbol = normalize_pair(pair)
     if symbol is None:
@@ -59,5 +65,26 @@ async def get_signal(
         signal = generate_signal(symbol, candles, predictor=predictor)
     except InsufficientDataError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    if health_engine is not None:
+        # R6: persist every served signal; never fail the request over logging.
+        try:
+            import time
+
+            from app.services.model_health import record_prediction
+
+            record_prediction(
+                health_engine,
+                pair=symbol,
+                interval=INTERVAL,
+                model_version=signal.model_version,
+                predicted_at_ms=int(time.time() * 1000),
+                direction=signal.direction,
+                confidence=signal.confidence,
+                horizon_ms=INTERVAL_MS[INTERVAL],
+                price=float(candles["close"].iloc[-1]),
+            )
+        except Exception as exc:
+            logger.warning("Failed to record prediction", error=str(exc))
 
     return SignalResponse(**signal.__dict__)

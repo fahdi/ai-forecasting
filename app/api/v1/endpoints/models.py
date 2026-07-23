@@ -18,6 +18,42 @@ from app.core.config import settings
 logger = structlog.get_logger()
 router = APIRouter()
 
+_HEALTH_ENGINE = "unset"
+
+
+def get_health_engine():
+    """Sync engine for the prediction log (issue #8) — override in tests."""
+    global _HEALTH_ENGINE
+    if _HEALTH_ENGINE == "unset":
+        import os
+
+        url = os.environ.get("DATABASE_URL")
+        if url:
+            from sqlalchemy import create_engine
+
+            from app.services.kline_store import create_tables
+
+            engine = create_engine(url.replace("postgresql+asyncpg", "postgresql"))
+            create_tables(engine)
+            _HEALTH_ENGINE = engine
+        else:
+            _HEALTH_ENGINE = None
+    return _HEALTH_ENGINE
+
+
+@router.get("/health")
+async def models_health(engine=Depends(get_health_engine)) -> Dict[str, Any]:
+    """Rolling directional accuracy + calibration per pair (PRD R6)."""
+    if engine is None:
+        return {"pairs": []}
+    import pandas as pd
+
+    from app.services.model_health import health_summary, resolve_predictions
+
+    now = pd.Timestamp.now(tz="UTC")
+    resolve_predictions(engine, now=now)
+    return health_summary(engine, now=now)
+
 # Pydantic models
 class ModelTrainingRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol to train model for")
