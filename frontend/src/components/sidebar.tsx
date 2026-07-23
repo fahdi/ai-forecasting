@@ -5,9 +5,10 @@ import {
   TrendingUp, 
   Brain, 
   Database, 
-  BarChart3, 
+  BarChart3,
   Settings,
-  Zap
+  Zap,
+  CandlestickChart
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +21,7 @@ const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "forecasts", label: "Forecasts", icon: TrendingUp },
   { id: "models", label: "Models", icon: Brain },
+  { id: "trading", label: "Trading", icon: CandlestickChart },
   { id: "data", label: "Data", icon: Database },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
