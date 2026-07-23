@@ -1,0 +1,94 @@
+{
+    // Freqtrade dry-run config for EnsembleSignalStrategy (issues #9/#10,
+    // PRD §4.2 and §7). Binance spot, paper wallet only — no API keys needed.
+    //
+    // Position sizing / risk-per-trade arithmetic (PRD §7: ≤ 2% of portfolio
+    // per trade):
+    //   risk per trade = position size × stop distance
+    //   with the strategy's hard stop at -5%, a 2% portfolio risk budget
+    //   allows a position of 2% / 5% = 40% of the portfolio.
+    //   stake_amount "unlimited" with max_open_trades = 3 and
+    //   tradable_balance_ratio 0.99 stakes ~= 0.99 / 3 = 33% of the portfolio
+    //   per trade, i.e. worst-case ~1.65% risk per trade — inside the 2%
+    //   budget and below the 40% position cap. Worst case with all 3 slots
+    //   open and all stops hit: ~4.95% of the portfolio, which is also what
+    //   the daily -5% circuit breaker (strategy protections) is tuned to.
+    "max_open_trades": 3,
+    "stake_currency": "USDT",
+    "stake_amount": "unlimited",
+    "tradable_balance_ratio": 0.99,
+    "fiat_display_currency": "USD",
+    "timeframe": "1h",
+    "dry_run": true,
+    "dry_run_wallet": 1000,
+    "cancel_open_orders_on_exit": false,
+    "trading_mode": "spot",
+    "margin_mode": "",
+    "unfilledtimeout": {
+        "entry": 10,
+        "exit": 10,
+        "exit_timeout_count": 0,
+        "unit": "minutes"
+    },
+    "entry_pricing": {
+        "price_side": "same",
+        "use_order_book": true,
+        "order_book_top": 1,
+        "price_last_balance": 0.0,
+        "check_depth_of_market": {
+            "enabled": false,
+            "bids_to_ask_delta": 1
+        }
+    },
+    "exit_pricing": {
+        "price_side": "same",
+        "use_order_book": true,
+        "order_book_top": 1
+    },
+    "order_types": {
+        "entry": "limit",
+        "exit": "limit",
+        "emergency_exit": "market",
+        "force_entry": "market",
+        "force_exit": "market",
+        "stoploss": "market",
+        // PRD R10: stops live on the exchange so positions stay protected
+        // even if the bot, VPS, or network dies.
+        "stoploss_on_exchange": true,
+        "stoploss_on_exchange_interval": 60
+    },
+    "exchange": {
+        "name": "binance",
+        "key": "",
+        "secret": "",
+        "ccxt_config": {},
+        "ccxt_async_config": {},
+        "pair_whitelist": [
+            "BTC/USDT",
+            "ETH/USDT",
+            "SOL/USDT",
+            "BNB/USDT"
+        ],
+        "pair_blacklist": []
+    },
+    "pairlists": [
+        {
+            "method": "StaticPairList"
+        }
+    ],
+    "telegram": {
+        "enabled": false,
+        "token": "",
+        "chat_id": ""
+    },
+    "bot_name": "ensemble-signal-dry",
+    "initial_state": "running",
+    "force_entry_enable": false,
+    "internals": {
+        "process_throttle_secs": 5
+    },
+    // Strategy resolves from the default location, user_data/strategies/.
+    "strategy": "EnsembleSignalStrategy",
+    "dataformat_ohlcv": "feather",
+    "dataformat_trades": "feather"
+}
