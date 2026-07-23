@@ -31,7 +31,18 @@ def main() -> int:
 
     engine = create_engine(args.database_url.replace("postgresql+asyncpg", "postgresql"))
     create_tables(engine)
-    consumer = KlineStreamConsumer(engine, list(UNIVERSE), args.interval)
+
+    heartbeat_fn = None
+    heartbeat_url = os.environ.get("HEALTHCHECKS_URL")
+    if heartbeat_url:
+        import httpx
+
+        def heartbeat_fn():
+            httpx.get(heartbeat_url, timeout=5.0)
+
+    consumer = KlineStreamConsumer(
+        engine, list(UNIVERSE), args.interval, heartbeat_fn=heartbeat_fn
+    )
     asyncio.run(consumer.run())
     return 0
 

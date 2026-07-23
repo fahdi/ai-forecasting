@@ -44,6 +44,8 @@ class KlineStreamConsumer:
         connect: Optional[Callable] = None,
         reconnect_delay: float = 5.0,
         now_fn: Callable[[], pd.Timestamp] = None,
+        heartbeat_fn: Optional[Callable[[], None]] = None,
+        heartbeat_interval: float = 60.0,
     ):
         self.engine = engine
         self.pairs = pairs
@@ -52,6 +54,9 @@ class KlineStreamConsumer:
         self.reconnect_delay = reconnect_delay
         self._now = now_fn or (lambda: pd.Timestamp.now(tz="UTC"))
         self._last_event: Dict[str, pd.Timestamp] = {}
+        self._heartbeat_fn = heartbeat_fn
+        self._heartbeat_interval = heartbeat_interval
+        self._last_heartbeat: Optional[pd.Timestamp] = None
 
     def last_event_time(self, pair: str) -> Optional[pd.Timestamp]:
         return self._last_event.get(pair)
@@ -82,6 +87,22 @@ class KlineStreamConsumer:
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             logger.warning("Skipping malformed kline message", error=str(exc))
 
+    def _maybe_heartbeat(self) -> None:
+        """R14 liveness ping — rate-limited, and never allowed to break the
+        consumer if the monitoring endpoint is down."""
+        if self._heartbeat_fn is None:
+            return
+        now = self._now()
+        if (self._last_heartbeat is not None
+                and (now - self._last_heartbeat).total_seconds()
+                < self._heartbeat_interval):
+            return
+        try:
+            self._heartbeat_fn()
+            self._last_heartbeat = now
+        except Exception as exc:
+            logger.warning("Heartbeat ping failed", error=str(exc))
+
     async def run(self, max_connections: Optional[int] = None) -> None:
         connections = 0
         while True:
@@ -90,6 +111,7 @@ class KlineStreamConsumer:
                 connection = await self._connect()
                 async for message in connection:
                     self._process(message)
+                    self._maybe_heartbeat()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

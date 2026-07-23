@@ -121,6 +121,36 @@ async def test_connection_error_triggers_reconnect(engine):
 
 
 @pytest.mark.asyncio
+async def test_heartbeat_pinged_while_consuming(engine):
+    """R14: the consumer emits liveness pings an external monitor can watch."""
+    pings = []
+    connect = make_connect(
+        [[kline_message("BTCUSDT", 0, closed=True),
+          kline_message("BTCUSDT", FOUR_H_MS, closed=True)]]
+    )
+    consumer = KlineStreamConsumer(
+        engine, ["BTCUSDT"], "4h", connect=connect,
+        heartbeat_fn=lambda: pings.append(1), heartbeat_interval=0,
+    )
+    await consumer.run(max_connections=1)
+    assert len(pings) >= 1
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_failure_does_not_crash_consumer(engine):
+    def broken_heartbeat():
+        raise RuntimeError("monitor down")
+
+    connect = make_connect([[kline_message("BTCUSDT", 0, closed=True)]])
+    consumer = KlineStreamConsumer(
+        engine, ["BTCUSDT"], "4h", connect=connect,
+        heartbeat_fn=broken_heartbeat, heartbeat_interval=0,
+    )
+    await consumer.run(max_connections=1)
+    assert count_klines(engine, "BTCUSDT", "4h") == 1
+
+
+@pytest.mark.asyncio
 async def test_staleness_per_pair(engine):
     connect = make_connect([[kline_message("BTCUSDT", 0, closed=True)]])
     fixed_now = pd.Timestamp("2026-01-01 12:00:00", tz="UTC")

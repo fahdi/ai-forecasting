@@ -1,26 +1,23 @@
+# PRD §5 service set (issue #12). Secrets come from .env — see env.example.
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:14
     environment:
-      POSTGRES_DB: ai_forecasting
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${POSTGRES_DB:-ai_forecasting}
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d ai_forecasting"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-ai_forecasting}"]
       interval: 30s
       timeout: 10s
       retries: 3
 
-  # Redis Cache
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -29,35 +26,13 @@ services:
       timeout: 10s
       retries: 3
 
-  # MinIO Object Storage
-  minio:
-    image: minio/minio:latest
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # AI Forecasting API
+  # Intelligence API: signals, model health, forecasts
   api:
     build: .
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/ai_forecasting
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-ai_forecasting}
       - REDIS_URL=redis://redis:6379/0
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-      - MINIO_BUCKET=ai-forecasting
-      - MINIO_SECURE=false
+      - MODEL_REGISTRY_PATH=/app/models/registry
     ports:
       - "8000:8000"
     depends_on:
@@ -65,12 +40,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
     volumes:
-      - ./data:/app/data
       - ./models:/app/models
-      - ./results:/app/results
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -78,43 +49,35 @@ services:
       timeout: 10s
       retries: 3
 
-  # Celery Worker (for background tasks)
-  worker:
+  # Live candle ingestion (websocket) with heartbeat monitoring
+  ingestor:
     build: .
-    command: celery -A app.core.celery worker --loglevel=info
+    command: python scripts/stream_klines.py --interval 4h
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/ai_forecasting
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-ai_forecasting}
+      - HEALTHCHECKS_URL=${HEALTHCHECKS_URL:-}
     depends_on:
-      - postgres
-      - redis
-    volumes:
-      - ./data:/app/data
-      - ./models:/app/models
-      - ./results:/app/results
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
-  # Celery Beat (for scheduled tasks)
-  beat:
-    build: .
-    command: celery -A app.core.celery beat --loglevel=info
+  # Execution engine (Freqtrade). Dry-run config by default; live requires
+  # a separate reviewed config plus G0-G2 gate sign-off (PRD §8).
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    command: trade --config /freqtrade/user_data/config.dry.json --strategy EnsembleSignalStrategy
     environment:
-      - DATABASE_URL=postgresql://user:password@postgres:5432/ai_forecasting
-      - REDIS_URL=redis://redis:6379/0
-      - CELERY_BROKER_URL=redis://redis:6379/1
-      - CELERY_RESULT_BACKEND=redis://redis:6379/2
-    depends_on:
-      - postgres
-      - redis
+      - SIGNAL_API_URL=http://api:8000
+      - FREQTRADE__TELEGRAM__ENABLED=${TELEGRAM_ENABLED:-false}
+      - FREQTRADE__TELEGRAM__TOKEN=${TELEGRAM_TOKEN:-}
+      - FREQTRADE__TELEGRAM__CHAT_ID=${TELEGRAM_CHAT_ID:-}
     volumes:
-      - ./data:/app/data
-      - ./models:/app/models
-      - ./results:/app/results
+      - ./user_data:/freqtrade/user_data
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
-  minio_data: 
