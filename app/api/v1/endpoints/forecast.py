@@ -32,7 +32,7 @@ class SingleForecastRequest(BaseModel):
     )
     model_type: Optional[str] = Field(
         default="ensemble",
-        description="Model type: xgboost, lightgbm, catboost, lstm, ensemble"
+        description="Model type: xgboost, lightgbm, catboost, ensemble"
     )
     include_confidence: bool = Field(
         default=True,
@@ -53,7 +53,7 @@ class BatchForecastRequest(BaseModel):
     )
     model_type: Optional[str] = Field(
         default="ensemble",
-        description="Model type: xgboost, lightgbm, catboost, lstm, ensemble"
+        description="Model type: xgboost, lightgbm, catboost, ensemble"
     )
     include_confidence: bool = Field(default=True)
     include_features: bool = Field(default=False)

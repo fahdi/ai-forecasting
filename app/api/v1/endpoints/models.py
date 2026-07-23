@@ -23,7 +23,7 @@ class ModelTrainingRequest(BaseModel):
     symbol: str = Field(..., description="Stock symbol to train model for")
     model_type: str = Field(
         default="ensemble",
-        description="Model type: xgboost, lightgbm, catboost, lstm, ensemble"
+        description="Model type: xgboost, lightgbm, catboost, ensemble"
     )
     test_size: float = Field(
         default=0.2,

@@ -125,18 +125,6 @@ class Settings(BaseSettings):
         description="CatBoost model parameters"
     )
     
-    LSTM_PARAMS: Dict[str, Any] = Field(
-        default={
-            "units": 50,
-            "layers": 2,
-            "dropout": 0.2,
-            "batch_size": 32,
-            "epochs": 100,
-            "validation_split": 0.2
-        },
-        description="LSTM model parameters"
-    )
-    
     # Feature Engineering Settings
     TECHNICAL_INDICATORS: List[str] = Field(
         default=[
@@ -230,7 +218,6 @@ MODEL_CONFIG = {
     "xgboost": settings.XGBOOST_PARAMS,
     "lightgbm": settings.LIGHTGBM_PARAMS,
     "catboost": settings.CATBOOST_PARAMS,
-    "lstm": settings.LSTM_PARAMS,
 }
 
 # Feature engineering configuration

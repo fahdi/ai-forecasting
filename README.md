@@ -46,29 +46,24 @@ A comprehensive AI-powered stock forecasting system that provides accurate, mult
 ```
 ai-forecasting/
 ├── app/                    # FastAPI application
-│   ├── api/               # API endpoints
-│   ├── core/              # Core business logic
-│   ├── models/            # ML model implementations
-│   ├── services/          # Business services
-│   └── utils/             # Utility functions
+│   ├── api/               # API endpoints (forecast, models, data, signal, health)
+│   ├── core/              # Config, database, middleware, monitoring
+│   ├── models/            # ML models and feature engineering
+│   └── services/          # Business services (data, forecast, signals)
 ├── frontend/              # Next.js web dashboard
-│   ├── src/
-│   │   ├── app/          # Next.js app router
-│   │   ├── components/   # React components
-│   │   └── lib/          # Utilities and API client
-├── data/                  # Data storage and processing
-├── models/                # Trained model storage
+│   └── src/
+│       ├── app/           # Next.js app router
+│       └── components/    # React components
 ├── tests/                 # Test suite
-├── docs/                  # Documentation
-├── scripts/               # Utility scripts
-└── config/                # Configuration files
+├── docs/                  # Documentation (incl. PRD-trading-bot.md)
+└── scripts/               # Utility scripts
 ```
 
 ## 🛠️ Technology Stack
 
 ### Backend
 - **Framework**: FastAPI, Uvicorn
-- **ML Libraries**: scikit-learn, XGBoost, LightGBM, CatBoost, TensorFlow, PyTorch
+- **ML Libraries**: scikit-learn, XGBoost, LightGBM, CatBoost
 - **Data Processing**: pandas, numpy, polars, statsmodels
 - **Database**: PostgreSQL, Redis
 - **Storage**: MinIO/S3

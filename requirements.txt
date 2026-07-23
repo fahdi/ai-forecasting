@@ -16,11 +16,6 @@ xgboost>=1.7.0
 lightgbm>=4.0.0
 catboost>=1.2.0
 
-# Deep Learning
-tensorflow>=2.13.0
-torch>=2.0.0
-pytorch-forecasting>=0.10.0
-
 # Time Series Analysis
 statsmodels>=0.14.0
 arch>=6.0.0

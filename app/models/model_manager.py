@@ -32,7 +32,7 @@ class ModelManager:
         Train a model of specified type
         
         Args:
-            model_type: Type of model (xgboost, lightgbm, catboost, lstm)
+            model_type: Type of model (xgboost, lightgbm, catboost)
             X_train: Training features
             y_train: Training targets
             symbol: Stock symbol for model identification
@@ -49,8 +49,6 @@ class ModelManager:
                 model = await self._train_lightgbm(X_train, y_train)
             elif model_type == "catboost":
                 model = await self._train_catboost(X_train, y_train)
-            elif model_type == "lstm":
-                model = await self._train_lstm(X_train, y_train)
             else:
                 raise ValueError(f"Unsupported model type: {model_type}")
             
@@ -145,50 +143,6 @@ class ModelManager:
             
         except Exception as e:
             logger.error(f"Error training CatBoost model: {e}")
-            raise
-    
-    async def _train_lstm(self, X_train: pd.DataFrame, y_train: pd.Series) -> Any:
-        """Train LSTM model"""
-        try:
-            import tensorflow as tf
-            from tensorflow.keras.models import Sequential
-            from tensorflow.keras.layers import LSTM, Dense, Dropout
-            
-            # Get model parameters
-            params = MODEL_CONFIG.get("lstm", {})
-            
-            # Reshape data for LSTM (samples, timesteps, features)
-            # For now, we'll use a simple approach with 1 timestep
-            X_reshaped = X_train.values.reshape((X_train.shape[0], 1, X_train.shape[1]))
-            
-            # Create model
-            model = Sequential([
-                LSTM(units=params.get("units", 50), 
-                     return_sequences=True, 
-                     input_shape=(1, X_train.shape[1])),
-                Dropout(params.get("dropout", 0.2)),
-                LSTM(units=params.get("units", 50), 
-                     return_sequences=False),
-                Dropout(params.get("dropout", 0.2)),
-                Dense(1)
-            ])
-            
-            # Compile model
-            model.compile(optimizer='adam', loss='mse')
-            
-            # Train model
-            model.fit(
-                X_reshaped, y_train.values,
-                epochs=params.get("epochs", 100),
-                batch_size=params.get("batch_size", 32),
-                validation_split=params.get("validation_split", 0.2),
-                verbose=0
-            )
-            
-            return model
-            
-        except Exception as e:
-            logger.error(f"Error training LSTM model: {e}")
             raise
     
     def predict(self, model: Any, X: pd.DataFrame) -> np.ndarray:
