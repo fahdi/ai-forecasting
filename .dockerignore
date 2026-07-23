@@ -1,0 +1,23 @@
+# Secrets — never bake into image layers
+.env
+
+# VCS / local state
+.git
+.gitignore
+.DS_Store
+
+# Virtualenvs and caches
+.venv
+.venv-freqtrade
+__pycache__
+*.pyc
+.pytest_cache
+catboost_info
+
+# Not part of the API image (mounted or built separately)
+frontend
+models
+data
+user_data
+backups
+docs

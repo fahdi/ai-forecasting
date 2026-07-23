@@ -11,7 +11,8 @@ set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-backups}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
-PGURL="${DATABASE_URL_PSQL:-postgresql://user:password@localhost:5432/ai_forecasting}"
+# POSTGRES_PORT tracks the compose host binding (see docker-compose.yml).
+PGURL="${DATABASE_URL_PSQL:-postgresql://user:password@localhost:${POSTGRES_PORT:-5432}/ai_forecasting}"
 
 mkdir -p "$BACKUP_DIR"
 STAMP="$(date -u +%Y%m%d-%H%M%S)"

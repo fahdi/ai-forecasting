@@ -31,6 +31,10 @@ def get_health_engine():
         if url:
             from sqlalchemy import create_engine
 
+            # Imported for its side effect: registers prediction_log on the
+            # shared kline_store metadata BEFORE create_tables runs, else a
+            # fresh database never gets the table (import-order dependent).
+            from app.services import model_health  # noqa: F401
             from app.services.kline_store import create_tables
 
             engine = create_engine(url.replace("postgresql+asyncpg", "postgresql"))

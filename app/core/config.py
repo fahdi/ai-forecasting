@@ -209,6 +209,9 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        # .env is shared with docker-compose/ops (env.example) and carries
+        # keys the app does not model (POSTGRES_PORT, TELEGRAM_*, ...).
+        extra = "ignore"
 
 # Create settings instance
 settings = Settings()

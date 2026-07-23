@@ -100,6 +100,11 @@ cd ai-forecasting
 docker-compose up -d
 ```
 
+> Postgres publishes to the host on `127.0.0.1:5432` (needed by
+> `scripts/backup_db.sh`). If 5432 is already in use on your machine,
+> copy `env.example` to `.env` and set `POSTGRES_PORT` to a free port
+> before starting.
+
 2. **Access the applications**:
 - **Web Dashboard**: http://localhost:3001
 - **API Documentation**: http://localhost:8000/docs
