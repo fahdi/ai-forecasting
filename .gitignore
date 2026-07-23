@@ -7,3 +7,6 @@ __pycache__/
 user_data/logs/
 user_data/data/
 user_data/backtest_results/
+tradesv3*.sqlite*
+models/registry/
+data/

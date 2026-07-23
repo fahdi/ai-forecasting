@@ -15,6 +15,7 @@ from app.services.signal_service import (
     InsufficientDataError,
     generate_signal,
     get_candle_source,
+    get_predictor,
     normalize_pair,
 )
 
@@ -44,6 +45,7 @@ class SignalResponse(BaseModel):
 async def get_signal(
     pair: str,
     source: CandleSource = Depends(get_candle_source),
+    predictor=Depends(get_predictor),
 ) -> SignalResponse:
     symbol = normalize_pair(pair)
     if symbol is None:
@@ -54,7 +56,7 @@ async def get_signal(
 
     candles = source.get_recent_candles(symbol, INTERVAL, CANDLE_LIMIT)
     try:
-        signal = generate_signal(symbol, candles)
+        signal = generate_signal(symbol, candles, predictor=predictor)
     except InsufficientDataError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

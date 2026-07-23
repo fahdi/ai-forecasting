@@ -109,13 +109,76 @@ def _is_stale(last_open_time: pd.Timestamp) -> bool:
     return (pd.Timestamp.now(tz="UTC") - last_close) > STALE_AFTER
 
 
-def generate_signal(symbol: str, candles: pd.DataFrame) -> Signal:
-    """Baseline momentum model: long iff EMA12 > EMA26 and close > EMA50."""
+def _ensemble_signal(symbol: str, candles: pd.DataFrame, predictor) -> Signal:
+    """Signal from the registry's active ensemble version."""
+    from app.models.crypto_features import compute_features
+
+    features = compute_features(candles)
+    last_row = features[features["complete"]].tail(1)
+    if last_row.empty:
+        raise InsufficientDataError(f"no complete feature row for {symbol}")
+
+    prob_long = predictor.prob_long(last_row)
+    direction = "long" if prob_long >= 0.5 else "flat"
+    confidence = prob_long if direction == "long" else 1.0 - prob_long
+
+    top_features = sorted(
+        (
+            {"name": name, "value": float(last_row[name].iloc[0])}
+            for name in predictor.feature_columns
+        ),
+        key=lambda item: abs(item["value"]),
+        reverse=True,
+    )[:5]
+
+    return Signal(
+        pair=UNIVERSE[symbol],
+        direction=direction,
+        confidence=float(confidence),
+        horizon=INTERVAL,
+        model_votes=predictor.member_votes(last_row),
+        top_features=top_features,
+        model_version=predictor.version_id,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        stale=_is_stale(candles["open_time"].iloc[-1]),
+    )
+
+
+def get_predictor():
+    """FastAPI dependency: the active ensemble, or None for baseline.
+
+    Loaded once per process from MODEL_REGISTRY_PATH; override in tests.
+    """
+    import os
+
+    global _PREDICTOR_CACHE
+    if _PREDICTOR_CACHE == "unset":
+        registry_path = os.environ.get("MODEL_REGISTRY_PATH", "models/registry")
+        try:
+            from app.models.ensemble_predictor import load_active
+
+            _PREDICTOR_CACHE = load_active(registry_path)
+        except Exception:
+            _PREDICTOR_CACHE = None
+    return _PREDICTOR_CACHE
+
+
+_PREDICTOR_CACHE = "unset"
+
+
+def generate_signal(symbol: str, candles: pd.DataFrame, predictor=None) -> Signal:
+    """Generate a signal from the active ensemble (issues #5/#6), falling back
+    to the baseline momentum model when no trained model is available.
+
+    Baseline: long iff EMA12 > EMA26 and close > EMA50.
+    """
     if len(candles) <= WARMUP_BARS:
         raise InsufficientDataError(
             f"insufficient history for {symbol}: "
             f"{len(candles)} bars, need > {WARMUP_BARS}"
         )
+    if predictor is not None:
+        return _ensemble_signal(symbol, candles, predictor)
 
     close = candles["close"]
     ema_12 = close.ewm(span=12, adjust=True).mean().iloc[-1]
