@@ -112,3 +112,5 @@ slowapi>=0.1.8
 
 # CORS
 fastapi-cors>=0.0.6 
+# HTTP client (Binance klines source)
+httpx>=0.27.0
