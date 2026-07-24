@@ -78,6 +78,9 @@ services:
       - FREQTRADE__TELEGRAM__ENABLED=${TELEGRAM_ENABLED:-false}
       - FREQTRADE__TELEGRAM__TOKEN=${TELEGRAM_TOKEN:-}
       - FREQTRADE__TELEGRAM__CHAT_ID=${TELEGRAM_CHAT_ID:-}
+    ports:
+      # Freqtrade REST API for the dashboard — host-local only
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./user_data:/freqtrade/user_data
     depends_on:
