@@ -115,7 +115,9 @@ def _ensemble_signal(symbol: str, candles: pd.DataFrame, predictor) -> Signal:
 
     features = compute_features(candles)
     last_row = features[features["complete"]].tail(1)
-    if last_row.empty:
+    if last_row.empty:  # pragma: no cover — len(candles) > WARMUP_BARS is
+        # enforced by the caller, which guarantees at least one complete row;
+        # kept as defense against future changes to the warm-up rule.
         raise InsufficientDataError(f"no complete feature row for {symbol}")
 
     prob_long = predictor.prob_long(last_row)

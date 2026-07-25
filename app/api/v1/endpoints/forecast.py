@@ -163,7 +163,7 @@ async def create_batch_forecast(
             symbol=",".join(request.symbols),
             forecast_horizon=request.forecast_horizon,
             model_type=request.model_type,
-            metadata={
+            job_metadata={
                 "symbols": request.symbols,
                 "include_confidence": request.include_confidence,
                 "include_features": request.include_features
@@ -233,7 +233,9 @@ async def get_forecast_status(
             "completed_at": job.completed_at,
             "error_message": job.error_message
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting forecast status: {e}")
         raise HTTPException(status_code=500, detail=str(e))

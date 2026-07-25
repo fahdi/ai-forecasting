@@ -33,21 +33,25 @@ def test_api_docs():
     response = client.get("/docs")
     assert response.status_code == 200
 
-@pytest.mark.asyncio
-async def test_single_forecast_endpoint():
+def _mock_forecast_services(mock_data_service, mock_forecast_service):
+    """Make the mocked services awaitable and hermetic: the background task
+    sees empty historical data, fails fast, and never touches the network or
+    trains a real model."""
+    import pandas as pd
+
+    mock_data_service.return_value.get_historical_data = AsyncMock(
+        return_value=pd.DataFrame()
+    )
+    mock_forecast_service.return_value.forecast = AsyncMock(
+        return_value={"metadata": {"symbol": "AAPL"}, "predictions": []}
+    )
+
+def test_single_forecast_endpoint():
     """Test single forecast endpoint"""
     with patch('app.api.v1.endpoints.forecast.DataService') as mock_data_service, \
          patch('app.api.v1.endpoints.forecast.ForecastService') as mock_forecast_service:
-        
-        # Mock data service
-        mock_data_service.return_value.get_historical_data.return_value = None
-        
-        # Mock forecast service
-        mock_forecast_service.return_value.forecast.return_value = {
-            "metadata": {"symbol": "AAPL"},
-            "predictions": []
-        }
-        
+        _mock_forecast_services(mock_data_service, mock_forecast_service)
+
         response = client.post(
             "/api/v1/forecast/single",
             json={
@@ -56,7 +60,7 @@ async def test_single_forecast_endpoint():
                 "model_type": "ensemble"
             }
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "job_id" in data
@@ -64,15 +68,19 @@ async def test_single_forecast_endpoint():
 
 def test_batch_forecast_endpoint():
     """Test batch forecast endpoint"""
-    response = client.post(
-        "/api/v1/forecast/batch",
-        json={
-            "symbols": ["AAPL", "GOOGL"],
-            "forecast_horizon": 7,
-            "model_type": "ensemble"
-        }
-    )
-    
+    with patch('app.api.v1.endpoints.forecast.DataService') as mock_data_service, \
+         patch('app.api.v1.endpoints.forecast.ForecastService') as mock_forecast_service:
+        _mock_forecast_services(mock_data_service, mock_forecast_service)
+
+        response = client.post(
+            "/api/v1/forecast/batch",
+            json={
+                "symbols": ["AAPL", "GOOGL"],
+                "forecast_horizon": 7,
+                "model_type": "ensemble"
+            }
+        )
+
     assert response.status_code == 200
     data = response.json()
     assert "job_id" in data
@@ -80,23 +88,29 @@ def test_batch_forecast_endpoint():
 
 def test_forecast_status_endpoint():
     """Test forecast status endpoint"""
-    # First create a forecast job
-    response = client.post(
-        "/api/v1/forecast/single",
-        json={
-            "symbol": "AAPL",
-            "forecast_horizon": 7
-        }
-    )
-    
+    # First create a forecast job (services mocked so the background task
+    # fails fast on empty data instead of fetching/training for real)
+    with patch('app.api.v1.endpoints.forecast.DataService') as mock_data_service, \
+         patch('app.api.v1.endpoints.forecast.ForecastService') as mock_forecast_service:
+        _mock_forecast_services(mock_data_service, mock_forecast_service)
+
+        response = client.post(
+            "/api/v1/forecast/single",
+            json={
+                "symbol": "AAPL",
+                "forecast_horizon": 7
+            }
+        )
+
     job_id = response.json()["job_id"]
-    
+
     # Check status
     status_response = client.get(f"/api/v1/forecast/status/{job_id}")
     assert status_response.status_code == 200
     data = status_response.json()
     assert "status" in data
     assert "symbol" in data
+    assert data["symbol"] == "AAPL"
 
 def test_models_performance_endpoint():
     """Test models performance endpoint"""
@@ -129,8 +143,14 @@ def test_metrics_endpoint():
     assert "text/plain" in response.headers["content-type"]
 
 def test_cors_headers():
-    """Test CORS headers are present"""
-    response = client.options("/health")
+    """Test CORS preflight is answered for an allowed origin"""
+    response = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
     assert response.status_code == 200
     assert "access-control-allow-origin" in response.headers
 

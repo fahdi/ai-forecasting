@@ -11,3 +11,5 @@ user_data/backtest_results/
 tradesv3*.sqlite*
 models/registry/
 data/
+.coverage
+catboost_info/

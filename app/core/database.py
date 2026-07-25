@@ -4,7 +4,7 @@ Database configuration and models for the AI Forecasting API
 
 import asyncio
 from typing import AsyncGenerator
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, JSON
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, JSON, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -16,9 +16,19 @@ from app.core.config import settings
 
 logger = structlog.get_logger()
 
+def _async_url(url: str) -> str:
+    """Map a driverless URL to its async driver (postgres in production,
+    sqlite in the test suite)."""
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://")
+    if url.startswith("sqlite://"):
+        return url.replace("sqlite://", "sqlite+aiosqlite://")
+    return url
+
+
 # Create async engine
 engine = create_async_engine(
-    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+    _async_url(settings.DATABASE_URL),
     echo=False,
     pool_pre_ping=True,
     pool_recycle=300,
@@ -167,7 +177,7 @@ async def update_forecast_job(
     error_message: str = None
 ) -> ForecastJob:
     """Update forecast job status"""
-    job = await db.get(ForecastJob, job_id)
+    job = await get_forecast_job(db, job_id)
     if job:
         job.status = status
         job.updated_at = datetime.utcnow()
@@ -181,8 +191,10 @@ async def update_forecast_job(
     return job
 
 async def get_forecast_job(db: AsyncSession, job_id: str) -> ForecastJob:
-    """Get forecast job by ID"""
-    return await db.get(ForecastJob, job_id)
+    """Get forecast job by its job_id (the primary key is the integer id,
+    so a Session.get PK lookup would never match)."""
+    result = await db.execute(select(ForecastJob).where(ForecastJob.job_id == job_id))
+    return result.scalar_one_or_none()
 
 async def save_model_performance(
     db: AsyncSession,

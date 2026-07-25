@@ -1,0 +1,12 @@
+[run]
+source = app
+
+[report]
+show_missing = True
+# Only genuinely unexercisable lines may be excluded; excluding reachable
+# logic to inflate the number defeats the metric's purpose.
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    ^\s*\.\.\.$
