@@ -27,6 +27,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { formatDistanceToNow } from "date-fns";
+import { CandleChartPanel } from "@/components/candle-chart";
 import {
   UNIVERSE_PAIRS,
   type TradingSignal,
@@ -752,6 +753,10 @@ export function Trading() {
 
       <PanelErrorBoundary name="Signal Feed">
         <SignalFeed signals={signals} />
+      </PanelErrorBoundary>
+
+      <PanelErrorBoundary name="Candles & Model View">
+        <CandleChartPanel />
       </PanelErrorBoundary>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

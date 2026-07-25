@@ -28,6 +28,11 @@ class EnsemblePredictor:
         X = features_row[self.feature_columns]
         return float(predict_prob_long(self.models, X)[0])
 
+    def prob_long_series(self, features: pd.DataFrame) -> np.ndarray:
+        """Vectorized prob-long over many feature rows (chart model view)."""
+        X = features[self.feature_columns]
+        return predict_prob_long(self.models, X)
+
     def member_votes(self, features_row: pd.DataFrame) -> Dict[str, str]:
         X = features_row[self.feature_columns]
         return {

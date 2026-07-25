@@ -187,3 +187,60 @@ export function tradeProfitPercent(trade: FreqtradeTrade): number {
   if (typeof trade.current_profit === 'number') return trade.current_profit * 100;
   return 0;
 }
+
+// ---------------------------------------------------------------------------
+// Chart API (candlesticks + prediction overlay)
+// ---------------------------------------------------------------------------
+
+export interface ChartCandle {
+  time: number; // unix seconds
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface ChartCandlesResponse {
+  pair: string;
+  interval: string;
+  candles: ChartCandle[];
+}
+
+export interface ModelViewPoint {
+  time: number; // unix seconds
+  prob_long: number;
+}
+
+export interface LoggedChartPrediction {
+  time: number; // unix seconds, snapped to candle open
+  direction: 'long' | 'flat';
+  confidence: number;
+  realized: number | null; // 1 rose, 0 did not, null unresolved
+}
+
+export interface ChartPredictionsResponse {
+  pair: string;
+  model_version: string | null;
+  training_window_end: string | null;
+  model_view: ModelViewPoint[];
+  logged: LoggedChartPrediction[];
+}
+
+export async function getChartCandles(
+  pair: string,
+  limit = 300,
+): Promise<ChartCandlesResponse> {
+  return requestJson<ChartCandlesResponse>(
+    `${SIGNAL_API_BASE_URL}/api/v1/chart/${pair}/candles?limit=${limit}`,
+  );
+}
+
+export async function getChartPredictions(
+  pair: string,
+  limit = 300,
+): Promise<ChartPredictionsResponse> {
+  return requestJson<ChartPredictionsResponse>(
+    `${SIGNAL_API_BASE_URL}/api/v1/chart/${pair}/predictions?limit=${limit}`,
+  );
+}
