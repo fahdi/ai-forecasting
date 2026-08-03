@@ -8,8 +8,10 @@ import {
   BarChart3,
   Settings,
   Zap,
-  CandlestickChart
+  CandlestickChart,
+  LogOut
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
@@ -28,6 +30,14 @@ const navItems = [
 ];
 
 export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  };
+
   return (
     <div className="w-64 bg-card border-r border-border flex flex-col">
       {/* Header */}
@@ -67,7 +77,14 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border">
+      <div className="p-4 border-t border-border space-y-3">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <LogOut className="h-5 w-5" />
+          <span>Sign out</span>
+        </button>
         <div className="text-xs text-muted-foreground text-center">
           AI Forecasting System v1.0.0
         </div>

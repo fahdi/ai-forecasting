@@ -1,0 +1,51 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createSessionToken, SESSION_COOKIE, SESSION_TTL_MS } from '@/lib/session';
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const bufA = enc.encode(a);
+  const bufB = enc.encode(b);
+  let diff = bufA.length ^ bufB.length;
+  const len = Math.max(bufA.length, bufB.length);
+  for (let i = 0; i < len; i++) {
+    diff |= (bufA[i] ?? 0) ^ (bufB[i] ?? 0);
+  }
+  return diff === 0;
+}
+
+export async function POST(request: NextRequest) {
+  const secret = process.env.AUTH_SECRET;
+  const expectedUser = process.env.DASHBOARD_USERNAME;
+  const expectedPass = process.env.DASHBOARD_PASSWORD;
+  if (!secret || !expectedUser || !expectedPass) {
+    return NextResponse.json({ error: 'auth not configured' }, { status: 503 });
+  }
+
+  let username = '';
+  let password = '';
+  try {
+    const body = await request.json();
+    username = String(body.username ?? '');
+    password = String(body.password ?? '');
+  } catch {
+    return NextResponse.json({ error: 'invalid request' }, { status: 400 });
+  }
+
+  const userOk = constantTimeEqual(username, expectedUser);
+  const passOk = constantTimeEqual(password, expectedPass);
+  if (!userOk || !passOk) {
+    // Slow down credential guessing; nginx adds rate limiting on top.
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    return NextResponse.json({ error: 'invalid credentials' }, { status: 401 });
+  }
+
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(SESSION_COOKIE, await createSessionToken(secret), {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: SESSION_TTL_MS / 1000,
+  });
+  return response;
+}

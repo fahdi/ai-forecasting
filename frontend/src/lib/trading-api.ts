@@ -1,7 +1,8 @@
-const SIGNAL_API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const FREQTRADE_BASE_URL = process.env.NEXT_PUBLIC_FREQTRADE_URL || 'http://localhost:8080';
-const FREQTRADE_USER = process.env.NEXT_PUBLIC_FREQTRADE_USER || '';
-const FREQTRADE_PASS = process.env.NEXT_PUBLIC_FREQTRADE_PASS || '';
+// Both upstreams are reached through the Next.js server-side proxy routes,
+// which the auth middleware gates. Freqtrade credentials live server-side
+// in the proxy — never in NEXT_PUBLIC_* vars shipped to the browser.
+const SIGNAL_API_BASE_URL = '/api/upstream/signal';
+const FREQTRADE_BASE_URL = '/api/upstream/freqtrade';
 
 export const UNIVERSE_PAIRS = ['BTC-USDT', 'ETH-USDT', 'SOL-USDT', 'BNB-USDT'] as const;
 export type UniversePair = (typeof UNIVERSE_PAIRS)[number];
@@ -126,12 +127,6 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function freqtradeAuthHeaders(): Record<string, string> {
-  if (!FREQTRADE_USER && !FREQTRADE_PASS) return {};
-  // btoa is fine here: all trading-api consumers are client components.
-  return { Authorization: `Basic ${btoa(`${FREQTRADE_USER}:${FREQTRADE_PASS}`)}` };
-}
-
 // ---------------------------------------------------------------------------
 // Signal API
 // ---------------------------------------------------------------------------
@@ -153,27 +148,19 @@ export async function pingSignalApi(): Promise<HealthStatus> {
 // ---------------------------------------------------------------------------
 
 export async function getFreqtradeStatus(): Promise<FreqtradeTrade[]> {
-  return requestJson<FreqtradeTrade[]>(`${FREQTRADE_BASE_URL}/api/v1/status`, {
-    headers: freqtradeAuthHeaders(),
-  });
+  return requestJson<FreqtradeTrade[]>(`${FREQTRADE_BASE_URL}/api/v1/status`);
 }
 
 export async function getFreqtradeProfit(): Promise<FreqtradeProfit> {
-  return requestJson<FreqtradeProfit>(`${FREQTRADE_BASE_URL}/api/v1/profit`, {
-    headers: freqtradeAuthHeaders(),
-  });
+  return requestJson<FreqtradeProfit>(`${FREQTRADE_BASE_URL}/api/v1/profit`);
 }
 
 export async function getFreqtradeBalance(): Promise<FreqtradeBalance> {
-  return requestJson<FreqtradeBalance>(`${FREQTRADE_BASE_URL}/api/v1/balance`, {
-    headers: freqtradeAuthHeaders(),
-  });
+  return requestJson<FreqtradeBalance>(`${FREQTRADE_BASE_URL}/api/v1/balance`);
 }
 
 export async function pingFreqtrade(): Promise<HealthStatus> {
-  return requestJson<HealthStatus>(`${FREQTRADE_BASE_URL}/api/v1/ping`, {
-    headers: freqtradeAuthHeaders(),
-  });
+  return requestJson<HealthStatus>(`${FREQTRADE_BASE_URL}/api/v1/ping`);
 }
 
 // ---------------------------------------------------------------------------

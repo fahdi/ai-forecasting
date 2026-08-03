@@ -1,4 +1,6 @@
-const API_BASE_URL = 'http://localhost:8000';
+// All calls go through the Next.js server-side proxy (auth-gated by the
+// middleware); the FastAPI is never exposed to the browser directly.
+const API_BASE_URL = '/api/upstream/signal';
 
 export interface ForecastRequest {
   symbol: string;
