@@ -1,0 +1,148 @@
+# Production stack for forecasts.isupercoder.com (Contabo VPS, shared with the
+# iSuperCoder platform). Self-contained — run with:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Differences from the local docker-compose.yml:
+# - No host port bindings at all. Only `forecasts-dashboard` is reachable, and
+#   only via the platform's nginx reverse-proxy on the external
+#   `production_isupercoder-simple` network.
+# - Memory limits on everything: the box has 5.8GB total and ~19 other
+#   containers. Limits sum to ~3.3GB; expected steady-state is well under.
+# - The dashboard proxies the API and freqtrade server-side; auth gates all
+#   pages (AUTH_SECRET / DASHBOARD_* are required, it fails closed without).
+#
+# Secrets come from .env — see env.example.
+
+services:
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ai_forecasting}
+      POSTGRES_USER: ${POSTGRES_USER:-user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-ai_forecasting}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  api:
+    build: .
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/${POSTGRES_DB:-ai_forecasting}
+      - REDIS_URL=redis://redis:6379/0
+      - MODEL_REGISTRY_PATH=/app/models/registry
+      - FREQTRADE_API_URL=http://freqtrade:8080
+      - FREQTRADE_API_USERNAME=${FREQTRADE_API_USERNAME:?set in .env}
+      - FREQTRADE_API_PASSWORD=${FREQTRADE_API_PASSWORD:?set in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./models:/app/models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1280M
+
+  ingestor:
+    build: .
+    command: python scripts/stream_klines.py --interval 4h
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/${POSTGRES_DB:-ai_forecasting}
+      - HEALTHCHECKS_URL=${HEALTHCHECKS_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          memory: 640M
+
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    command: trade --config /freqtrade/user_data/config.dry.json --strategy EnsembleSignalStrategy
+    environment:
+      - SIGNAL_API_URL=http://api:8000
+      - FREQTRADE__TELEGRAM__ENABLED=${TELEGRAM_ENABLED:-false}
+      - FREQTRADE__TELEGRAM__TOKEN=${TELEGRAM_TOKEN:-}
+      - FREQTRADE__TELEGRAM__CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - FREQTRADE__API_SERVER__USERNAME=${FREQTRADE_API_USERNAME:?set in .env}
+      - FREQTRADE__API_SERVER__PASSWORD=${FREQTRADE_API_PASSWORD:?set in .env}
+    volumes:
+      - ./user_data:/freqtrade/user_data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  dashboard:
+    build: ./frontend
+    container_name: forecasts-dashboard
+    environment:
+      - SIGNAL_API_INTERNAL_URL=http://api:8000
+      - FREQTRADE_INTERNAL_URL=http://freqtrade:8080
+      - FREQTRADE_API_USERNAME=${FREQTRADE_API_USERNAME:?set in .env}
+      - FREQTRADE_API_PASSWORD=${FREQTRADE_API_PASSWORD:?set in .env}
+      - AUTH_SECRET=${AUTH_SECRET:?set in .env}
+      - DASHBOARD_USERNAME=${DASHBOARD_USERNAME:?set in .env}
+      - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:?set in .env}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - default
+      - edge
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
+networks:
+  # The platform reverse-proxy's network; nginx proxies
+  # forecasts.isupercoder.com -> forecasts-dashboard:3000 over it.
+  edge:
+    external: true
+    name: production_isupercoder-simple
+
+volumes:
+  postgres_data:
+  redis_data:
