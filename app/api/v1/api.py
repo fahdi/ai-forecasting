@@ -4,7 +4,7 @@ Main API router for v1 endpoints
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import forecast, models, data, health, signal, chart
+from app.api.v1.endpoints import forecast, models, data, health, signal, chart, trading
 
 api_router = APIRouter()
 
@@ -14,4 +14,5 @@ api_router.include_router(signal.router, prefix="/signal", tags=["signal"])
 api_router.include_router(chart.router, prefix="/chart", tags=["chart"])
 api_router.include_router(forecast.router, prefix="/forecast", tags=["forecast"])
 api_router.include_router(models.router, prefix="/models", tags=["models"])
-api_router.include_router(data.router, prefix="/data", tags=["data"]) 
+api_router.include_router(data.router, prefix="/data", tags=["data"])
+api_router.include_router(trading.router, prefix="/trading", tags=["trading"])

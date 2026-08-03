@@ -35,6 +35,9 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-ai_forecasting}
       - REDIS_URL=redis://redis:6379/0
       - MODEL_REGISTRY_PATH=/app/models/registry
+      - FREQTRADE_API_URL=http://freqtrade:8080
+      - FREQTRADE_API_USERNAME=${FREQTRADE_API_USERNAME:-freqtrade}
+      - FREQTRADE_API_PASSWORD=${FREQTRADE_API_PASSWORD:-local-dry-run}
     ports:
       - "8000:8000"
     depends_on:
@@ -78,6 +81,8 @@ services:
       - FREQTRADE__TELEGRAM__ENABLED=${TELEGRAM_ENABLED:-false}
       - FREQTRADE__TELEGRAM__TOKEN=${TELEGRAM_TOKEN:-}
       - FREQTRADE__TELEGRAM__CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - FREQTRADE__API_SERVER__USERNAME=${FREQTRADE_API_USERNAME:-freqtrade}
+      - FREQTRADE__API_SERVER__PASSWORD=${FREQTRADE_API_PASSWORD:-local-dry-run}
     ports:
       # Freqtrade REST API for the dashboard — host-local only
       - "127.0.0.1:8080:8080"

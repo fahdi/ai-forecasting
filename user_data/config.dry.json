@@ -81,6 +81,10 @@
         "token": "",
         "chat_id": ""
     },
+    // REST API for the platform's /api/v1/trading/summary endpoint and the
+    // dashboard. Reachable on the compose network and 127.0.0.1:8080 on the
+    // host; credentials are dry-run defaults, overridden via
+    // FREQTRADE__API_SERVER__* env vars in docker-compose (see env.example).
     "api_server": {
         "enabled": true,
         "listen_ip_address": "0.0.0.0",
