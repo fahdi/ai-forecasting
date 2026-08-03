@@ -5,17 +5,28 @@ human with credentials and cannot be automated from this repo.
 
 ## 1. VPS deployment (R15)
 
-1. Provision a small VPS (2 vCPU / 4GB is plenty), install Docker + compose.
-2. `git clone` the repo; `cp env.example .env` and fill real values
-   (`POSTGRES_PASSWORD`, `HEALTHCHECKS_URL`, Telegram vars). No secrets in git.
-3. `docker compose up -d` — brings up postgres, redis, api (signals + model
-   health), ingestor (live candles + heartbeat), freqtrade (dry-run config).
-4. Backfill + train once:
-   `docker compose exec api python scripts/backfill_klines.py --all --interval 4h`
-   then `--interval 1d`, then
-   `docker compose exec api python scripts/train_ensemble.py`.
-5. Dashboard: `cd frontend && npm ci && npm run build && npm run start`
-   (or deploy to Vercel with `NEXT_PUBLIC_*` env set).
+**Deployed:** https://forecasts.isupercoder.com — full stack (postgres, redis,
+api, ingestor, freqtrade dry-run, dashboard) at `/opt/ai-forecasting` on the
+iSuperCoder Contabo VPS (207.244.253.120), behind the platform's nginx
+reverse-proxy. SSH via `iSuperCoder.com/infra/production/server-login.sh`.
+
+1. `git clone` the repo to `/opt/ai-forecasting`; write `.env` with real values
+   (`POSTGRES_PASSWORD`, `FREQTRADE_API_*`, `AUTH_SECRET`, `DASHBOARD_*`,
+   `HEALTHCHECKS_URL`, Telegram vars). No secrets in git; `chmod 600 .env`.
+2. Copy the trained registry (gitignored):
+   `tar -C models -czf - registry | ssh <vps> 'tar -C /opt/ai-forecasting/models -xzf -'`
+3. `docker compose -f docker-compose.prod.yml up -d --build` — no host ports;
+   only the `forecasts-dashboard` container joins the platform proxy network
+   (`production_isupercoder-simple`). Nginx routing lives in
+   `iSuperCoder.com/infra/production/nginx/production.conf`.
+4. Backfill once:
+   `docker compose -f docker-compose.prod.yml exec api python scripts/backfill_klines.py --all --interval 4h`
+   then `--interval 1d`. (Training happens locally; the registry is synced up.)
+5. Dashboard auth: every page is gated by the login (`DASHBOARD_USERNAME` /
+   `DASHBOARD_PASSWORD`); the middleware fails closed if auth env is missing.
+   Nginx rate-limits the login endpoint (5 req/min per IP).
+6. Local dev still uses plain `docker compose up -d` + `cd frontend && npm run dev`
+   (see `frontend/.env.local` — dev creds `dev`/`dev`).
 
 ## 2. Binance API keys (R16) — **MANUAL**
 

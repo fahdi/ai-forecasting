@@ -2,6 +2,8 @@
 
 A comprehensive AI-powered stock forecasting system that provides accurate, multi-timeframe predictions for financial instruments and macroeconomic indicators. Features a modern web dashboard for real-time monitoring and forecasting.
 
+**Production:** https://forecasts.isupercoder.com (login required) — full stack via `docker-compose.prod.yml` on the iSuperCoder VPS; see `docs/RUNBOOK.md` §1 for deployment details.
+
 ## 🚀 Features
 
 ### Core Forecasting Engine
