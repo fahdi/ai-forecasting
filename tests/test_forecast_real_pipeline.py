@@ -235,3 +235,76 @@ class TestRecentEndpoint:
             response = client.get("/api/v1/forecast/recent?limit=5")
         assert response.status_code == 200
         assert capture.await_args.kwargs.get("limit") == 5 or 5 in capture.await_args.args
+
+
+# ---------------------------------------------------------------------------
+# Forecast evaluation metrics persist to ModelPerformance
+# ---------------------------------------------------------------------------
+
+class TestPerformancePersistence:
+    @pytest.mark.asyncio
+    async def test_completed_forecast_saves_performance_metrics(self):
+        forecast_payload = {
+            "metadata": {"symbol": "GC=F", "model_used": "ensemble"},
+            "predictions": [{"date": "2026-08-05", "predicted_price": 2500.0}],
+            "performance_metrics": {
+                "mape": 21.5, "mae": 717.8, "rmse": 718.2,
+                "directional_accuracy": 83.3,
+            },
+        }
+        frame = pd.DataFrame({"Close": [1.0, 2.0]})
+        save_perf = AsyncMock()
+        session_factory = MagicMock()
+        session_factory.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+        session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(f"{NS}.update_forecast_job", new=AsyncMock()), \
+             patch(f"{NS}.save_model_performance", new=save_perf), \
+             patch("app.core.database.AsyncSessionLocal", session_factory), \
+             patch(f"{NS}.DataService") as data_service_cls, \
+             patch(f"{NS}.ForecastService") as forecast_service_cls:
+            data_service_cls.return_value.get_historical_data = AsyncMock(return_value=frame)
+            forecast_service_cls.return_value.forecast = AsyncMock(return_value=forecast_payload)
+            await process_single_forecast(
+                job_id="perf-job-12345678",
+                symbol="XAU",
+                forecast_horizon=7,
+                model_type="ensemble",
+                include_confidence=True,
+                include_features=False,
+            )
+
+        save_perf.assert_awaited_once()
+        kwargs = save_perf.await_args.kwargs
+        assert kwargs["model_type"] == "ensemble"
+        assert kwargs["symbol"] == "XAU"
+        assert kwargs["mape"] == 21.5
+        assert kwargs["directional_accuracy"] == 83.3
+        assert kwargs["version"].startswith("forecast-")
+
+    @pytest.mark.asyncio
+    async def test_forecast_without_metrics_saves_nothing(self):
+        forecast_payload = {"metadata": {}, "predictions": []}
+        frame = pd.DataFrame({"Close": [1.0, 2.0]})
+        save_perf = AsyncMock()
+        session_factory = MagicMock()
+        session_factory.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+        session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(f"{NS}.update_forecast_job", new=AsyncMock()), \
+             patch(f"{NS}.save_model_performance", new=save_perf), \
+             patch("app.core.database.AsyncSessionLocal", session_factory), \
+             patch(f"{NS}.DataService") as data_service_cls, \
+             patch(f"{NS}.ForecastService") as forecast_service_cls:
+            data_service_cls.return_value.get_historical_data = AsyncMock(return_value=frame)
+            forecast_service_cls.return_value.forecast = AsyncMock(return_value=forecast_payload)
+            await process_single_forecast(
+                job_id="perf-job-empty",
+                symbol="XAU",
+                forecast_horizon=7,
+                model_type="ensemble",
+                include_confidence=True,
+                include_features=False,
+            )
+
+        save_perf.assert_not_awaited()

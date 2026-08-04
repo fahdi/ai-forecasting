@@ -20,6 +20,7 @@ from app.core.database import (
     get_recent_forecast_jobs,
     count_active_forecast_jobs,
     find_reusable_forecast_job,
+    save_model_performance,
 )
 from app.services.forecast_service import ForecastService
 from app.services.data_service import DataService
@@ -409,6 +410,21 @@ async def process_single_forecast(
                 result_path=result_path,
                 result_json=forecast_result,
             )
+            # Evaluation metrics feed /models/performance (Dashboard accuracy
+            # card, Analytics). Values are percentages, matching the training
+            # flow's convention.
+            metrics = forecast_result.get("performance_metrics") or {}
+            if metrics:
+                await save_model_performance(
+                    db=db,
+                    model_type=model_type,
+                    symbol=symbol,
+                    version=f"forecast-{job_id[:8]}",
+                    mape=metrics.get("mape"),
+                    mae=metrics.get("mae"),
+                    rmse=metrics.get("rmse"),
+                    directional_accuracy=metrics.get("directional_accuracy"),
+                )
         
         # Record metrics
         duration = (datetime.utcnow() - start_time).total_seconds()

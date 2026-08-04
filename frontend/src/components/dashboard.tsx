@@ -100,7 +100,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
             ? [...new Set(models.value.map((m) => m.model_type))]
             : [],
         accuracy: accuracies.length
-          ? (accuracies.reduce((s, v) => s + v, 0) / accuracies.length) * 100
+          ? accuracies.reduce((s, v) => s + v, 0) / accuracies.length
           : null,
         recentJobs: recent.status === "fulfilled" ? recent.value : [],
         loaded: true,

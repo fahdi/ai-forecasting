@@ -312,7 +312,7 @@ async def process_model_training(
                 mae=training_result.get("mae"),
                 rmse=training_result.get("rmse"),
                 directional_accuracy=training_result.get("directional_accuracy"),
-                metadata=training_result.get("metadata")
+                model_metadata=training_result.get("metadata")
             )
         
         # Record metrics

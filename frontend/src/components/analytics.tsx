@@ -21,7 +21,7 @@ function aggregate(performances: ModelPerformance[]): Aggregates {
   const avgMape = avg(mapes);
   return {
     accuracy: avgMape !== null ? Math.max(0, 100 - avgMape) : null,
-    directional: avg(dirs) !== null ? (avg(dirs) as number) * 100 : null,
+    directional: avg(dirs),
     rmse: avg(rmses),
     evaluated: performances.length,
   };

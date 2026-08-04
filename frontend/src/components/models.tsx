@@ -51,7 +51,7 @@ export function Models() {
               symbol: m.symbol,
               version: m.version,
               accuracy:
-                perf?.directional_accuracy != null ? perf.directional_accuracy * 100 : null,
+                perf?.directional_accuracy ?? null,
               mape: perf?.mape ?? null,
               lastTrained: m.last_trained,
             };
