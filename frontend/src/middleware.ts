@@ -9,9 +9,12 @@ export async function middleware(request: NextRequest) {
   if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
 
   const secret = process.env.AUTH_SECRET;
-  if (!secret || !process.env.DASHBOARD_USERNAME || !process.env.DASHBOARD_PASSWORD) {
+  const hasUsers =
+    (process.env.DASHBOARD_USERNAME && process.env.DASHBOARD_PASSWORD) ||
+    (process.env.DASHBOARD_USERS ?? '').includes(':');
+  if (!secret || !hasUsers) {
     // Fail closed: a public trading dashboard must never come up unauthenticated.
-    return new NextResponse('Dashboard auth is not configured (AUTH_SECRET / DASHBOARD_USERNAME / DASHBOARD_PASSWORD).', {
+    return new NextResponse('Dashboard auth is not configured (AUTH_SECRET plus DASHBOARD_USERNAME/DASHBOARD_PASSWORD or DASHBOARD_USERS).', {
       status: 503,
     });
   }
