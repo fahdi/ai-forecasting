@@ -95,6 +95,22 @@ class TestSymbolAliases:
     def test_lowercase_and_whitespace_normalized(self):
         assert normalize_symbol("  xau ") == "GC=F"
 
+    @pytest.mark.parametrize(
+        "pair,expected",
+        [
+            ("XAU/USD", "GC=F"),
+            ("XAUUSD", "GC=F"),
+            ("XAG/USD", "SI=F"),
+            ("BTC/USD", "BTC-USD"),
+            ("ETHUSD", "ETH-USD"),
+        ],
+    )
+    def test_usd_pair_spellings_map_to_base_alias(self, pair, expected):
+        assert normalize_symbol(pair) == expected
+
+    def test_unknown_usd_pair_passes_through(self):
+        assert normalize_symbol("FOO/USD") == "FOO/USD"
+
     def test_plain_tickers_pass_through_uppercased(self):
         assert normalize_symbol("aapl") == "AAPL"
         assert normalize_symbol("GC=F") == "GC=F"

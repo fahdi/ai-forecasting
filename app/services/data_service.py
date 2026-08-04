@@ -38,9 +38,21 @@ SYMBOL_ALIASES = {
 }
 
 def normalize_symbol(symbol: str) -> str:
-    """Map a user-facing symbol to its data-source ticker."""
+    """Map a user-facing symbol to its data-source ticker.
+
+    Also accepts common USD-pair spellings of aliased assets ("XAU/USD",
+    "XAUUSD") by resolving the base asset through the alias map. Unknown
+    symbols pass through unchanged so real tickers keep working.
+    """
     cleaned = symbol.strip().upper()
-    return SYMBOL_ALIASES.get(cleaned, cleaned)
+    if cleaned in SYMBOL_ALIASES:
+        return SYMBOL_ALIASES[cleaned]
+    for suffix in ("/USD", "USD"):
+        if cleaned.endswith(suffix):
+            base = cleaned[: -len(suffix)]
+            if base in SYMBOL_ALIASES:
+                return SYMBOL_ALIASES[base]
+    return cleaned
 
 class DataService:
     """Service for data management and processing"""
