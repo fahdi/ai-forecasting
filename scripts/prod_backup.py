@@ -19,6 +19,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import List, Optional
 
 PREFIX = "aif-db-"
 STAMP_FORMAT = "%Y%m%d-%H%M%S"
@@ -30,12 +31,12 @@ DEFAULT_DUMP_CMD = [
 ]
 
 
-def backup_filename(now: datetime | None = None) -> str:
+def backup_filename(now: Optional[datetime] = None) -> str:
     stamp = (now or datetime.utcnow()).strftime(STAMP_FORMAT)
     return f"{PREFIX}{stamp}.sql.gz"
 
 
-def prune_old_backups(backup_dir: Path, keep_days: int, now: datetime | None = None) -> list:
+def prune_old_backups(backup_dir: Path, keep_days: int, now: Optional[datetime] = None) -> List[str]:
     """Delete backups older than keep_days, judged by the timestamp in the
     filename (mtimes lie after copies). Non-matching files are untouched."""
     now = now or datetime.utcnow()
@@ -72,7 +73,7 @@ def run_backup(
     backup_dir: Path,
     keep_days: int,
     dump_cmd: list,
-    now: datetime | None = None,
+    now: Optional[datetime] = None,
 ) -> Path:
     backup_dir = Path(backup_dir)
     backup_dir.mkdir(parents=True, exist_ok=True)
