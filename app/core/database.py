@@ -206,6 +206,22 @@ async def get_forecast_job(db: AsyncSession, job_id: str) -> ForecastJob:
     result = await db.execute(select(ForecastJob).where(ForecastJob.job_id == job_id))
     return result.scalar_one_or_none()
 
+async def fail_orphaned_forecast_jobs(db: AsyncSession) -> int:
+    """Fail jobs still pending/running from a previous process. Background
+    tasks die with the process, so these can never complete — leaving them
+    would show perpetually-running rows and make clients poll until timeout."""
+    result = await db.execute(
+        select(ForecastJob).where(ForecastJob.status.in_(("pending", "running")))
+    )
+    jobs = list(result.scalars().all())
+    for job in jobs:
+        job.status = "failed"
+        job.error_message = "Interrupted by service restart; re-run the forecast"
+        job.updated_at = datetime.utcnow()
+    if jobs:
+        await db.commit()
+    return len(jobs)
+
 async def get_recent_forecast_jobs(db: AsyncSession, limit: int = 20) -> list:
     """Most recent forecast jobs, newest first (dashboard feed)."""
     result = await db.execute(

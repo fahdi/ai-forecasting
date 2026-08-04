@@ -14,7 +14,7 @@ from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_
 from structlog import get_logger
 
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import init_db, AsyncSessionLocal, fail_orphaned_forecast_jobs
 from app.api.v1.api import api_router
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.monitoring import setup_monitoring
@@ -34,6 +34,12 @@ async def lifespan(app: FastAPI):
     
     # Initialize database
     await init_db()
+    
+    # Fail jobs orphaned by the previous process (their background tasks died)
+    async with AsyncSessionLocal() as db:
+        orphaned = await fail_orphaned_forecast_jobs(db)
+        if orphaned:
+            logger.warning(f"Marked {orphaned} orphaned forecast job(s) as failed")
     
     # Setup monitoring
     setup_monitoring()
