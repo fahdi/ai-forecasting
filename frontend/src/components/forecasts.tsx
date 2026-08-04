@@ -171,7 +171,7 @@ export function Forecasts() {
       pollJob(response.job_id, Date.now());
     } catch (error) {
       console.error("Error creating forecast:", error);
-      toast.error("Failed to create forecast. Please try again.");
+      toast.error(error instanceof Error && error.message ? error.message : "Failed to create forecast. Please try again.");
     } finally {
       setLoading(false);
     }

@@ -18,6 +18,7 @@ from app.core.database import (
     update_forecast_job,
     get_forecast_job,
     get_recent_forecast_jobs,
+    count_active_forecast_jobs,
 )
 from app.services.forecast_service import ForecastService
 from app.services.data_service import DataService
@@ -88,6 +89,15 @@ async def create_single_forecast(
     Returns a job ID that can be used to track the forecast progress
     """
     try:
+        active = await count_active_forecast_jobs(db)
+        if active >= settings.MAX_CONCURRENT_FORECAST_JOBS:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"{active} forecast job(s) already in progress "
+                    "(each one trains models); please try again in a minute"
+                ),
+            )
         # Generate job ID
         job_id = str(uuid.uuid4())
         
@@ -135,6 +145,8 @@ async def create_single_forecast(
             estimated_completion=estimated_completion
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating single forecast: {e}")
         record_forecast_request(request.model_type, request.symbol, "failed")
@@ -152,6 +164,15 @@ async def create_batch_forecast(
     Returns a job ID that can be used to track the forecast progress
     """
     try:
+        active = await count_active_forecast_jobs(db)
+        if active >= settings.MAX_CONCURRENT_FORECAST_JOBS:
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    f"{active} forecast job(s) already in progress "
+                    "(each one trains models); please try again in a minute"
+                ),
+            )
         # Generate job ID
         job_id = str(uuid.uuid4())
         

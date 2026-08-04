@@ -71,7 +71,8 @@ def make_job(**overrides) -> SimpleNamespace:
 
 class TestSingleForecast:
     def test_create_single_forecast_success(self):
-        with patch(f"{NS}.create_forecast_job", new=AsyncMock()) as create_job, \
+        with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=0)), \
+             patch(f"{NS}.create_forecast_job", new=AsyncMock()) as create_job, \
              patch(f"{NS}.process_single_forecast", new=AsyncMock()) as bg_task:
             response = client.post(
                 "/api/v1/forecast/single",
@@ -99,7 +100,8 @@ class TestSingleForecast:
         assert response.status_code == 422
 
     def test_create_single_forecast_db_error_returns_500(self):
-        with patch(f"{NS}.create_forecast_job",
+        with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=0)), \
+             patch(f"{NS}.create_forecast_job",
                    new=AsyncMock(side_effect=RuntimeError("db down"))):
             response = client.post(
                 "/api/v1/forecast/single", json={"symbol": "AAPL"}
@@ -110,7 +112,8 @@ class TestSingleForecast:
 
 class TestBatchForecast:
     def test_create_batch_forecast_success(self):
-        with patch(f"{NS}.create_forecast_job", new=AsyncMock()) as create_job, \
+        with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=0)), \
+             patch(f"{NS}.create_forecast_job", new=AsyncMock()) as create_job, \
              patch(f"{NS}.process_batch_forecast", new=AsyncMock()) as bg_task:
             response = client.post(
                 "/api/v1/forecast/batch",
@@ -126,7 +129,8 @@ class TestBatchForecast:
 
     def test_create_batch_forecast_too_many_symbols(self):
         symbols = [f"S{i}" for i in range(101)]
-        with patch(f"{NS}.create_forecast_job", new=AsyncMock()):
+        with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=0)), \
+             patch(f"{NS}.create_forecast_job", new=AsyncMock()):
             response = client.post(
                 "/api/v1/forecast/batch", json={"symbols": symbols}
             )
@@ -134,7 +138,8 @@ class TestBatchForecast:
         assert "Maximum 100 symbols" in response.json()["detail"]
 
     def test_create_batch_forecast_db_error_returns_500(self):
-        with patch(f"{NS}.create_forecast_job",
+        with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=0)), \
+             patch(f"{NS}.create_forecast_job",
                    new=AsyncMock(side_effect=RuntimeError("insert failed"))):
             response = client.post(
                 "/api/v1/forecast/batch", json={"symbols": ["AAPL"]}

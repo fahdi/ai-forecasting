@@ -206,6 +206,16 @@ async def get_forecast_job(db: AsyncSession, job_id: str) -> ForecastJob:
     result = await db.execute(select(ForecastJob).where(ForecastJob.job_id == job_id))
     return result.scalar_one_or_none()
 
+async def count_active_forecast_jobs(db: AsyncSession) -> int:
+    """Number of jobs currently pending or running."""
+    from sqlalchemy import func
+    result = await db.execute(
+        select(func.count()).select_from(ForecastJob).where(
+            ForecastJob.status.in_(("pending", "running"))
+        )
+    )
+    return int(result.scalar() or 0)
+
 async def fail_orphaned_forecast_jobs(db: AsyncSession) -> int:
     """Fail jobs still pending/running from a previous process. Background
     tasks die with the process, so these can never complete — leaving them

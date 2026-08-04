@@ -89,6 +89,10 @@ class Settings(BaseSettings):
         default=252,
         description="Minimum historical data required for forecasting"
     )
+    MAX_CONCURRENT_FORECAST_JOBS: int = Field(
+        default=3,
+        description="Reject new forecast jobs with 429 while this many are pending/running (each job trains models; the VPS is shared)"
+    )
     DATA_CACHE_TTL_HOURS: int = Field(
         default=12,
         description="Serve cached market data younger than this; refetch older (stale cache is kept as a fallback when the refetch fails)"

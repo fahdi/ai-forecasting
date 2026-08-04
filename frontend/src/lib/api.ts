@@ -115,7 +115,14 @@ class ApiService {
     });
 
     if (!response.ok) {
-      throw new Error(`API request failed: ${response.statusText}`);
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        if (typeof body?.detail === "string") detail = body.detail;
+      } catch {
+        // non-JSON error body; keep statusText
+      }
+      throw new Error(detail);
     }
 
     return response.json();
