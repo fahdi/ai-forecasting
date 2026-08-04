@@ -175,3 +175,53 @@ class TestEndpoint:
         entry = body["pairs"][0]
         assert {"pair", "directional_accuracy_7d", "directional_accuracy_30d",
                 "n_predictions", "calibration"} <= set(entry)
+
+
+# ---------------------------------------------------------------------------
+# Dedup: polling clients re-request the same signal many times per candle;
+# the audit trail must hold one row per (pair, interval, model, candle) or
+# rolling accuracy overweights whatever candle the dashboard stared at.
+# ---------------------------------------------------------------------------
+
+class TestRecordPredictionDedup:
+    HOUR_MS = 3_600_000
+    BUCKET_MS = 4 * HOUR_MS
+
+    def _record(self, engine, at_ms, pair="BTCUSDT", version="v1"):
+        return record_prediction(
+            engine,
+            pair=pair,
+            interval="4h",
+            model_version=version,
+            predicted_at_ms=at_ms,
+            direction="long",
+            confidence=0.6,
+            horizon_ms=self.BUCKET_MS,
+            price=100.0,
+        )
+
+    def _count(self, engine):
+        from sqlalchemy import func, select
+        from app.services.model_health import prediction_log
+        with engine.connect() as conn:
+            return conn.execute(select(func.count()).select_from(prediction_log)).scalar()
+
+    def test_same_candle_bucket_is_recorded_once(self, engine):
+        base = 1_000 * self.BUCKET_MS
+        assert self._record(engine, base + 1_000) is True
+        assert self._record(engine, base + 60_000) is False
+        assert self._record(engine, base + self.BUCKET_MS - 1) is False
+        assert self._count(engine) == 1
+
+    def test_next_candle_bucket_records_again(self, engine):
+        base = 1_000 * self.BUCKET_MS
+        assert self._record(engine, base + 1_000) is True
+        assert self._record(engine, base + self.BUCKET_MS + 1_000) is True
+        assert self._count(engine) == 2
+
+    def test_different_pair_and_model_are_independent(self, engine):
+        base = 1_000 * self.BUCKET_MS
+        assert self._record(engine, base + 1_000) is True
+        assert self._record(engine, base + 2_000, pair="ETHUSDT") is True
+        assert self._record(engine, base + 3_000, version="v2") is True
+        assert self._count(engine) == 3

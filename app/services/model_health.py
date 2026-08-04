@@ -55,8 +55,28 @@ def record_prediction(
     confidence: float,
     horizon_ms: int,
     price: float,
-) -> None:
+) -> bool:
+    """Insert one audit row per (pair, interval, model, candle bucket).
+
+    Polling clients re-request the same signal many times per candle; the
+    repeats carry no new information and would overweight single candles in
+    the rolling accuracy stats. Returns True if a row was written.
+    """
+    bucket_start = predicted_at_ms - (predicted_at_ms % horizon_ms)
     with engine.begin() as conn:
+        exists = conn.execute(
+            select(prediction_log.c.id)
+            .where(
+                prediction_log.c.pair == pair,
+                prediction_log.c.interval == interval,
+                prediction_log.c.model_version == model_version,
+                prediction_log.c.predicted_at_ms >= bucket_start,
+                prediction_log.c.predicted_at_ms < bucket_start + horizon_ms,
+            )
+            .limit(1)
+        ).first()
+        if exists is not None:
+            return False
         conn.execute(
             prediction_log.insert().values(
                 pair=pair,
@@ -69,6 +89,7 @@ def record_prediction(
                 price=price,
             )
         )
+        return True
 
 
 def _close_at_or_after(conn, pair: str, interval: str, at_ms: int) -> Optional[float]:

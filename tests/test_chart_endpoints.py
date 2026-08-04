@@ -103,15 +103,23 @@ class TestPredictions:
         assert entry["realized"] is None  # unresolved yet
 
     def test_logged_predictions_deduped_per_candle(self, client, engine):
-        """Polling records many predictions per candle; the chart wants the
-        latest one per candle, not a stack of markers."""
+        """Polling used to record many rows per candle and the chart deduped
+        at read time. record_prediction now dedupes at write time (one row
+        per candle bucket), so repeat polls are no-ops and the chart still
+        shows exactly one marker per candle."""
         seed_candles(engine, n=60)
-        for offset, direction in [(100, "long"), (2000, "long"), (3000, "flat")]:
-            record_prediction(engine, pair="BTCUSDT", interval="4h",
-                              model_version="m1",
-                              predicted_at_ms=10 * FOUR_H_MS + offset,
-                              direction=direction, confidence=0.6,
-                              horizon_ms=FOUR_H_MS, price=100.0)
+        assert record_prediction(engine, pair="BTCUSDT", interval="4h",
+                                 model_version="m1",
+                                 predicted_at_ms=10 * FOUR_H_MS + 100,
+                                 direction="long", confidence=0.6,
+                                 horizon_ms=FOUR_H_MS, price=100.0) is True
+        # Repeat polls within the same candle bucket record nothing new.
+        for offset in (2000, 3000):
+            assert record_prediction(engine, pair="BTCUSDT", interval="4h",
+                                     model_version="m1",
+                                     predicted_at_ms=10 * FOUR_H_MS + offset,
+                                     direction="long", confidence=0.6,
+                                     horizon_ms=FOUR_H_MS, price=100.0) is False
         record_prediction(engine, pair="BTCUSDT", interval="4h",
                           model_version="m1",
                           predicted_at_ms=11 * FOUR_H_MS,
@@ -120,8 +128,7 @@ class TestPredictions:
         body = client.get("/api/v1/chart/BTC-USDT/predictions").json()
         assert len(body["logged"]) == 2  # one per candle
         by_time = {entry["time"]: entry for entry in body["logged"]}
-        # Latest prediction for candle 10 wins.
-        assert by_time[10 * FOUR_H_MS // 1000]["direction"] == "flat"
+        assert by_time[10 * FOUR_H_MS // 1000]["direction"] == "long"
 
     def test_model_view_series_with_predictor(self, client, engine):
         seed_candles(engine, n=120)
