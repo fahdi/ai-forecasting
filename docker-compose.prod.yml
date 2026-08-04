@@ -64,6 +64,9 @@ services:
         condition: service_healthy
     volumes:
       - ./models:/app/models
+      # Market-data cache + uploaded CSVs must survive rebuilds; without this
+      # every deploy wiped the cache and each forecast re-downloaded history.
+      - api_data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -148,3 +151,4 @@ networks:
 volumes:
   postgres_data:
   redis_data:
+  api_data:
