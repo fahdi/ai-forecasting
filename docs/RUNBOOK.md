@@ -27,7 +27,7 @@ reverse-proxy. SSH via `iSuperCoder.com/infra/production/server-login.sh`.
    Nginx rate-limits the login endpoint (5 req/min per IP).
 6. Local dev still uses plain `docker compose up -d` + `cd frontend && npm run dev`
    (see `frontend/.env.local` — dev creds `dev`/`dev`).
-7. Backups: host cron runs `scripts/prod_backup.py` nightly (03:17 UTC) —
+7. Backups: host cron runs `scripts/prod_backup.py` nightly (03:17 server time, root crontab) —
    compose-exec pg_dump, gzip + integrity check, 14-day retention in
    `/opt/backups/ai-forecasting/`, log at `/var/log/aif-backup.log`.
 
