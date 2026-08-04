@@ -14,6 +14,7 @@ export interface ForecastRow {
   status: "pending" | "running" | "completed" | "failed";
   prediction: number | null;
   hitRate: number | null;
+  sampleSize: number | null;
   error: string | null;
   createdAt: string;
 }
@@ -27,6 +28,7 @@ export function jobToRow(job: RecentForecastJob): ForecastRow {
     status: (job.status as ForecastRow["status"]) ?? "pending",
     prediction: job.last_prediction,
     hitRate: job.directional_accuracy ?? null,
+    sampleSize: job.evaluation_points ?? null,
     error: job.error_message,
     createdAt: job.created_at,
   };

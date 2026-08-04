@@ -111,6 +111,7 @@ async def test_forecast_ensemble_success_with_features(svc):
         "mape",
         "rmse",
         "directional_accuracy",
+        "evaluation_points",
     }
     fs_mod.record_forecast_duration.assert_called_once()
 
@@ -337,3 +338,18 @@ async def test_batch_forecast_mixed_outcomes(svc):
 async def test_batch_forecast_outer_error_propagates(svc):
     with pytest.raises(TypeError):
         await svc.batch_forecast(symbols=None, data_dict={}, horizon=5)
+
+
+class TestMetricsSampleSize:
+    def test_metrics_report_evaluation_points(self):
+        """A hit rate without its sample size presents noise as signal; the
+        UI shows 'n=' so tiny holdouts read as tentative, not authoritative."""
+        import pandas as pd
+        from app.services.forecast_service import ForecastService
+
+        service = ForecastService()
+        actual = pd.Series([100.0, 101.0, 99.0, 102.0, 103.0, 101.0, 104.0])
+        predictions = [{"predicted_price": v} for v in [100.5, 100.0, 99.5, 101.0, 104.0, 102.0, 103.0]]
+        metrics = service._calculate_performance_metrics(actual, predictions)
+        assert metrics["evaluation_points"] == 6  # diff over 7 aligned points
+        assert 0.0 <= metrics["directional_accuracy"] <= 100.0

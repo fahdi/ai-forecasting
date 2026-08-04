@@ -21,6 +21,7 @@ function job(overrides: Partial<RecentForecastJob> = {}): RecentForecastJob {
     last_prediction: 4033.71,
     mape: 21.5,
     directional_accuracy: 83.3,
+    evaluation_points: 6,
     confidence: 0.998,
     ...overrides,
   };
@@ -30,6 +31,7 @@ describe("jobToRow", () => {
   it("maps the holdout hit rate, not the self-reported confidence", () => {
     const row = jobToRow(job());
     expect(row.hitRate).toBe(83.3);
+    expect(row.sampleSize).toBe(6);
     expect("confidence" in row).toBe(false);
   });
 

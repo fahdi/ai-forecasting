@@ -40,7 +40,8 @@ export function Forecasts() {
           const predictions = result.predictions ?? [];
           const last = predictions.length ? predictions[predictions.length - 1].predicted_price : null;
           const hitRate = result.performance_metrics?.directional_accuracy ?? null;
-          patchRow(jobId, { status: "completed", prediction: last, hitRate });
+          const sampleSize = result.performance_metrics?.evaluation_points ?? null;
+          patchRow(jobId, { status: "completed", prediction: last, hitRate, sampleSize });
           toast.success("Forecast completed!");
           return;
         }
@@ -136,6 +137,7 @@ export function Forecasts() {
         status: "pending",
         prediction: null,
         hitRate: null,
+        sampleSize: null,
         error: null,
         createdAt: new Date().toISOString()
       };
@@ -268,7 +270,9 @@ export function Forecasts() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {forecast.hitRate !== null ? `${forecast.hitRate.toFixed(0)}%` : "n/a"}
+                      {forecast.hitRate !== null
+                        ? `${forecast.hitRate.toFixed(0)}%${forecast.sampleSize !== null ? ` (n=${forecast.sampleSize})` : ""}`
+                        : "n/a"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">

@@ -272,7 +272,8 @@ class ForecastService:
                 "mae": float(mae),
                 "mape": float(mape),
                 "rmse": float(rmse),
-                "directional_accuracy": float(directional_accuracy)
+                "directional_accuracy": float(directional_accuracy),
+                "evaluation_points": int(len(actual_direction)),
             }
             
         except Exception as e:

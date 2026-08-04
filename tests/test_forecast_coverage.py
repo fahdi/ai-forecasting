@@ -123,6 +123,7 @@ async def test_forecast_ensemble_success_with_features(svc):
         "mape",
         "rmse",
         "directional_accuracy",
+        "evaluation_points",
     }
 
 

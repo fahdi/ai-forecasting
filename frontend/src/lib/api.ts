@@ -35,6 +35,7 @@ export interface ForecastResult {
     mae: number;
     rmse: number;
     directional_accuracy: number;
+    evaluation_points?: number;
   };
 }
 
@@ -70,6 +71,7 @@ export interface RecentForecastJob {
   last_prediction: number | null;
   mape: number | null;
   directional_accuracy: number | null;
+  evaluation_points: number | null;
   confidence: number | null;
 }
 

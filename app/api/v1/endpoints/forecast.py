@@ -357,6 +357,7 @@ async def get_recent_forecasts(
                 "last_prediction": last_prediction,
                 "mape": metrics.get("mape"),
                 "directional_accuracy": metrics.get("directional_accuracy"),
+                "evaluation_points": metrics.get("evaluation_points"),
                 "confidence": metadata.get("confidence"),
             })
         return {"jobs": payload}
