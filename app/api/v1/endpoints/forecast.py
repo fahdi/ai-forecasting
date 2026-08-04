@@ -359,25 +359,27 @@ async def process_single_forecast(
         async with AsyncSessionLocal() as db:
             await update_forecast_job(db, job_id, "running")
         
-        # Initialize services
-        data_service = DataService()
-        forecast_service = ForecastService()
+        # Fetch + train on a worker thread: the pipeline is CPU-bound and
+        # would otherwise freeze the event loop (all requests, including the
+        # dashboard's polling) for the duration of every training run.
+        def _fetch_and_forecast():
+            async def _inner():
+                data_service = DataService()
+                forecast_service = ForecastService()
+                historical_data = await data_service.get_historical_data(symbol)
+                if historical_data.empty:
+                    raise ValueError(f"No historical data available for {symbol}")
+                return await forecast_service.forecast(
+                    data=historical_data,
+                    symbol=symbol,
+                    horizon=forecast_horizon,
+                    model_type=model_type,
+                    include_confidence=include_confidence,
+                    include_features=include_features
+                )
+            return asyncio.run(_inner())
         
-        # Get historical data
-        historical_data = await data_service.get_historical_data(symbol)
-        
-        if historical_data.empty:
-            raise ValueError(f"No historical data available for {symbol}")
-        
-        # Perform forecast
-        forecast_result = await forecast_service.forecast(
-            data=historical_data,
-            symbol=symbol,
-            horizon=forecast_horizon,
-            model_type=model_type,
-            include_confidence=include_confidence,
-            include_features=include_features
-        )
+        forecast_result = await asyncio.to_thread(_fetch_and_forecast)
         
         # Persist the computed result on the job row
         result_path = f"results/{job_id}.json"
@@ -427,31 +429,33 @@ async def process_batch_forecast(
         async with AsyncSessionLocal() as db:
             await update_forecast_job(db, job_id, "running")
         
-        # Initialize services
-        data_service = DataService()
-        forecast_service = ForecastService()
-        
         results = {}
+        first_error = None
         
-        # Process each symbol
+        # Process each symbol (fetch + train off the event loop, see above)
         for symbol in symbols:
             try:
-                # Get historical data
-                historical_data = await data_service.get_historical_data(symbol)
+                def _fetch_and_forecast(sym=symbol):
+                    async def _inner():
+                        data_service = DataService()
+                        forecast_service = ForecastService()
+                        historical_data = await data_service.get_historical_data(sym)
+                        if historical_data.empty:
+                            return None
+                        return await forecast_service.forecast(
+                            data=historical_data,
+                            symbol=sym,
+                            horizon=forecast_horizon,
+                            model_type=model_type,
+                            include_confidence=include_confidence,
+                            include_features=include_features
+                        )
+                    return asyncio.run(_inner())
                 
-                if historical_data.empty:
+                forecast_result = await asyncio.to_thread(_fetch_and_forecast)
+                if forecast_result is None:
                     logger.warning(f"No historical data available for {symbol}")
                     continue
-                
-                # Perform forecast
-                forecast_result = await forecast_service.forecast(
-                    data=historical_data,
-                    symbol=symbol,
-                    horizon=forecast_horizon,
-                    model_type=model_type,
-                    include_confidence=include_confidence,
-                    include_features=include_features
-                )
                 
                 results[symbol] = forecast_result
                 
@@ -460,7 +464,13 @@ async def process_batch_forecast(
                 
             except Exception as e:
                 logger.error(f"Error processing {symbol}: {e}")
+                first_error = first_error or str(e)
                 record_forecast_request(model_type, symbol, "failed")
+        
+        if not results:
+            # "Completed" with zero results would be a lie; fail loudly with
+            # the first underlying error so the dashboard shows why.
+            raise RuntimeError(first_error or "No symbols produced a forecast")
         
         # Persist per-symbol results on the job row
         result_path = f"results/{job_id}.json"

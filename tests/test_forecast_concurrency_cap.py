@@ -60,3 +60,55 @@ def test_single_intended_http_errors_are_not_wrapped_as_500():
     with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=99)):
         response = client.post("/api/v1/forecast/single", json={"symbol": "AAPL"})
     assert response.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_forecast_training_does_not_block_event_loop():
+    """CPU-bound training used to run on the event loop, freezing every
+    request (dashboard polling, health checks) for the duration and
+    serializing jobs so the concurrency cap could never engage."""
+    import asyncio
+    import time
+
+    import pandas as pd
+
+    from app.api.v1.endpoints.forecast import process_single_forecast
+
+    frame = pd.DataFrame({"Close": [1.0, 2.0]})
+
+    class SlowDataService:
+        async def get_historical_data(self, symbol):
+            time.sleep(1.0)  # blocking work; must land on a worker thread
+            return frame
+
+    session_factory = MagicMock()
+    session_factory.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+    session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    with patch(f"{NS}.DataService", SlowDataService), \
+         patch(f"{NS}.ForecastService") as forecast_service_cls, \
+         patch(f"{NS}.update_forecast_job", new=AsyncMock()), \
+         patch("app.core.database.AsyncSessionLocal", session_factory):
+        forecast_service_cls.return_value.forecast = AsyncMock(
+            return_value={"metadata": {}, "predictions": []}
+        )
+        task = asyncio.create_task(
+            process_single_forecast(
+                job_id="loop-block-test",
+                symbol="AAPL",
+                forecast_horizon=7,
+                model_type="ensemble",
+                include_confidence=True,
+                include_features=False,
+            )
+        )
+        # The task starts on the first await. If its blocking work runs on
+        # the event loop, this 0.1s sleep will not return for ~1s.
+        t0 = time.perf_counter()
+        await asyncio.sleep(0.1)
+        loop_latency = time.perf_counter() - t0 - 0.1
+        await task
+
+    assert loop_latency < 0.4, (
+        f"event loop was blocked for {loop_latency:.2f}s during training"
+    )
