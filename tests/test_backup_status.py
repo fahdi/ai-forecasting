@@ -65,3 +65,30 @@ def test_detailed_health_includes_backup_component(tmp_path, monkeypatch):
     body = client.get("/api/v1/health/detailed").json()
     assert "backups" in body["components"]
     assert body["components"]["backups"]["status"] in ("healthy", "stale", "missing")
+
+
+def test_detailed_health_database_probe_uses_executable_statement():
+    """Regression: the probe passed a raw string to session.execute, which
+    SQLAlchemy 2.x rejects — production showed 'database unhealthy' while
+    the database was fine."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.core.database import get_db
+
+    class Sqla2Session:
+        async def execute(self, stmt):
+            if isinstance(stmt, str):
+                raise Exception("Textual SQL expression should be explicit")
+            result = MagicMock()
+            result.fetchone = AsyncMock(return_value=(1,))
+            return result
+
+    async def _get_db():
+        yield Sqla2Session()
+
+    app.dependency_overrides[get_db] = _get_db
+    try:
+        body = TestClient(app).get("/api/v1/health/detailed").json()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert body["components"]["database"]["status"] == "healthy"

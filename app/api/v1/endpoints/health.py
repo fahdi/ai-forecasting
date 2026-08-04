@@ -45,9 +45,12 @@ async def detailed_health_check(
     
     # Check database
     try:
-        # Test database connection
-        result = await db.execute("SELECT 1")
-        await result.fetchone()
+        # Test database connection (SQLAlchemy 2.x requires an executable
+        # statement object, not a raw string)
+        from sqlalchemy import text
+
+        result = await db.execute(text("SELECT 1"))
+        result.fetchone()
         health_status["components"]["database"] = {
             "status": "healthy",
             "message": "Database connection successful"
