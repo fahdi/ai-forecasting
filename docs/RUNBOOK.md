@@ -22,14 +22,14 @@ reverse-proxy. SSH via `iSuperCoder.com/infra/production/server-login.sh`.
 4. Backfill once:
    `docker compose -f docker-compose.prod.yml exec api python scripts/backfill_klines.py --all --interval 4h`
    then `--interval 1d`. (Training happens locally; the registry is synced up.)
-7. Backups: host cron runs `scripts/prod_backup.py` nightly (03:17 UTC) —
-   compose-exec pg_dump, gzip + integrity check, 14-day retention in
-   `/opt/backups/ai-forecasting/`, log at `/var/log/aif-backup.log`.
 5. Dashboard auth: every page is gated by the login (`DASHBOARD_USERNAME` /
    `DASHBOARD_PASSWORD`); the middleware fails closed if auth env is missing.
    Nginx rate-limits the login endpoint (5 req/min per IP).
 6. Local dev still uses plain `docker compose up -d` + `cd frontend && npm run dev`
    (see `frontend/.env.local` — dev creds `dev`/`dev`).
+7. Backups: host cron runs `scripts/prod_backup.py` nightly (03:17 UTC) —
+   compose-exec pg_dump, gzip + integrity check, 14-day retention in
+   `/opt/backups/ai-forecasting/`, log at `/var/log/aif-backup.log`.
 
 ## 2. Binance API keys (R16) — **MANUAL**
 
