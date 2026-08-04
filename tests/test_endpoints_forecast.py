@@ -71,7 +71,8 @@ def make_job(**overrides) -> SimpleNamespace:
 
 class TestSingleForecast:
     def test_create_single_forecast_success(self):
-        with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=0)), \
+        with patch(f"{NS}.find_reusable_forecast_job", new=AsyncMock(return_value=None)), \
+             patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=0)), \
              patch(f"{NS}.create_forecast_job", new=AsyncMock()) as create_job, \
              patch(f"{NS}.process_single_forecast", new=AsyncMock()) as bg_task:
             response = client.post(
@@ -100,7 +101,8 @@ class TestSingleForecast:
         assert response.status_code == 422
 
     def test_create_single_forecast_db_error_returns_500(self):
-        with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=0)), \
+        with patch(f"{NS}.find_reusable_forecast_job", new=AsyncMock(return_value=None)), \
+             patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=0)), \
              patch(f"{NS}.create_forecast_job",
                    new=AsyncMock(side_effect=RuntimeError("db down"))):
             response = client.post(

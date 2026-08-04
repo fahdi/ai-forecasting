@@ -19,6 +19,7 @@ from app.core.database import (
     get_forecast_job,
     get_recent_forecast_jobs,
     count_active_forecast_jobs,
+    find_reusable_forecast_job,
 )
 from app.services.forecast_service import ForecastService
 from app.services.data_service import DataService
@@ -89,6 +90,25 @@ async def create_single_forecast(
     Returns a job ID that can be used to track the forecast progress
     """
     try:
+        # Serve a fresh identical result instantly instead of retraining
+        # (and instead of burning the concurrency cap on a repeat click).
+        reusable = await find_reusable_forecast_job(
+            db,
+            request.symbol.upper(),
+            request.forecast_horizon,
+            request.model_type,
+            max_age_minutes=settings.FORECAST_REUSE_TTL_MINUTES,
+        )
+        if reusable is not None:
+            age_minutes = max(
+                0, int((datetime.utcnow() - reusable.completed_at).total_seconds() // 60)
+            )
+            return ForecastResponse(
+                job_id=reusable.job_id,
+                status="completed",
+                message=f"Reusing forecast computed {age_minutes} minute(s) ago",
+            )
+        
         active = await count_active_forecast_jobs(db)
         if active >= settings.MAX_CONCURRENT_FORECAST_JOBS:
             raise HTTPException(

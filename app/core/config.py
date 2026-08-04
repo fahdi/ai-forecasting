@@ -89,6 +89,10 @@ class Settings(BaseSettings):
         default=252,
         description="Minimum historical data required for forecasting"
     )
+    FORECAST_REUSE_TTL_MINUTES: int = Field(
+        default=60,
+        description="Reuse a completed forecast for the same symbol/horizon/model this recent instead of retraining"
+    )
     MAX_CONCURRENT_FORECAST_JOBS: int = Field(
         default=3,
         description="Reject new forecast jobs with 429 while this many are pending/running (each job trains models; the VPS is shared)"

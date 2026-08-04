@@ -206,6 +206,33 @@ async def get_forecast_job(db: AsyncSession, job_id: str) -> ForecastJob:
     result = await db.execute(select(ForecastJob).where(ForecastJob.job_id == job_id))
     return result.scalar_one_or_none()
 
+async def find_reusable_forecast_job(
+    db: AsyncSession,
+    symbol: str,
+    forecast_horizon: int,
+    model_type: str,
+    max_age_minutes: int,
+):
+    """Newest completed job with stored results for the same request shape,
+    completed within the freshness window. Lets the API serve repeat
+    requests instantly instead of retraining."""
+    from datetime import timedelta
+    cutoff = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+    result = await db.execute(
+        select(ForecastJob)
+        .where(
+            ForecastJob.symbol == symbol,
+            ForecastJob.forecast_horizon == forecast_horizon,
+            ForecastJob.model_type == model_type,
+            ForecastJob.status == "completed",
+            ForecastJob.result_json.isnot(None),
+            ForecastJob.completed_at >= cutoff,
+        )
+        .order_by(ForecastJob.completed_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
 async def count_active_forecast_jobs(db: AsyncSession) -> int:
     """Number of jobs currently pending or running."""
     from sqlalchemy import func

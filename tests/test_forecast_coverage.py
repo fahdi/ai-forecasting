@@ -350,6 +350,8 @@ def test_single_forecast_success_and_status():
 
 def test_single_forecast_create_job_error():
     with patch(
+        f"{EP}.find_reusable_forecast_job", AsyncMock(return_value=None)
+    ), patch(
         f"{EP}.create_forecast_job", AsyncMock(side_effect=RuntimeError("db down"))
     ):
         resp = client.post(f"{API}/single", json={"symbol": "AAPL"})

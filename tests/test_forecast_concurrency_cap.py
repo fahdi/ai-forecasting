@@ -28,7 +28,8 @@ def _db_override():
 
 
 def test_single_rejected_at_cap_with_429():
-    with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=3)), \
+    with patch(f"{NS}.find_reusable_forecast_job", new=AsyncMock(return_value=None)), \
+         patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=3)), \
          patch(f"{NS}.create_forecast_job", new=AsyncMock()) as create_job:
         response = client.post("/api/v1/forecast/single", json={"symbol": "AAPL"})
     assert response.status_code == 429
@@ -37,7 +38,8 @@ def test_single_rejected_at_cap_with_429():
 
 
 def test_single_allowed_under_cap():
-    with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=2)), \
+    with patch(f"{NS}.find_reusable_forecast_job", new=AsyncMock(return_value=None)), \
+         patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=2)), \
          patch(f"{NS}.create_forecast_job", new=AsyncMock()), \
          patch(f"{NS}.process_single_forecast", new=AsyncMock()):
         response = client.post("/api/v1/forecast/single", json={"symbol": "AAPL"})
@@ -57,7 +59,8 @@ def test_single_intended_http_errors_are_not_wrapped_as_500():
     """The /single blanket except previously converted any HTTPException
     raised inside the handler into a 500 (same bug family as /batch and
     /results, fixed earlier)."""
-    with patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=99)):
+    with patch(f"{NS}.find_reusable_forecast_job", new=AsyncMock(return_value=None)), \
+         patch(f"{NS}.count_active_forecast_jobs", new=AsyncMock(return_value=99)):
         response = client.post("/api/v1/forecast/single", json={"symbol": "AAPL"})
     assert response.status_code == 429
 
