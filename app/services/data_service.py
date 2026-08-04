@@ -3,6 +3,7 @@ Data service for handling data ingestion, processing, and management
 """
 
 import os
+import time
 import uuid
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -89,27 +90,45 @@ class DataService:
         """
         try:
             symbol = normalize_symbol(symbol)
-            # Check if we have cached data
-            cached_data = await self._load_cached_data(symbol, source)
-            
-            if cached_data is not None:
-                # Filter by date range if provided
-                if start_date:
-                    cached_data = cached_data[cached_data.index >= start_date]
-                if end_date:
-                    cached_data = cached_data[cached_data.index <= end_date]
-                
-                if not cached_data.empty:
-                    logger.info(f"Loaded cached data for {symbol}", rows=len(cached_data))
-                    return cached_data
-            
-            # Fetch fresh data
-            if source == "yahoo":
-                data = await self._fetch_yahoo_data(symbol, start_date, end_date)
-            elif source == "alpha_vantage":
-                data = await self._fetch_alpha_vantage_data(symbol, start_date, end_date)
-            else:
+            if source not in ("yahoo", "alpha_vantage"):
                 raise ValueError(f"Unsupported data source: {source}")
+
+            def _windowed(frame: pd.DataFrame) -> pd.DataFrame:
+                if start_date:
+                    frame = frame[frame.index >= start_date]
+                if end_date:
+                    frame = frame[frame.index <= end_date]
+                return frame
+
+            cached_data = await self._load_cached_data(symbol, source)
+            age = self._cache_age_seconds(symbol, source)
+            ttl_seconds = settings.DATA_CACHE_TTL_HOURS * 3600
+            # age is None when there is no cache file on disk; if a loader
+            # nevertheless produced data (tests stub it), treat it as fresh.
+            cache_fresh = cached_data is not None and (age is None or age <= ttl_seconds)
+
+            if cache_fresh:
+                windowed = _windowed(cached_data)
+                if not windowed.empty:
+                    logger.info(f"Loaded cached data for {symbol}", rows=len(windowed))
+                    return windowed
+
+            # Fetch fresh data; a stale cache is kept as an availability
+            # fallback so an upstream outage does not kill forecasts.
+            try:
+                if source == "yahoo":
+                    data = await self._fetch_yahoo_data(symbol, start_date, end_date)
+                else:
+                    data = await self._fetch_alpha_vantage_data(symbol, start_date, end_date)
+            except Exception as fetch_error:
+                if cached_data is not None:
+                    logger.warning(
+                        f"Fetch failed for {symbol}; serving stale cache",
+                        age_seconds=age,
+                        error=str(fetch_error),
+                    )
+                    return _windowed(cached_data)
+                raise
             
             if data is not None and not data.empty:
                 # Cache the data
@@ -119,9 +138,13 @@ class DataService:
                 record_data_points_processed(source, symbol, len(data))
                 
                 return data
-            else:
-                logger.warning(f"No data found for {symbol} from {source}")
-                return pd.DataFrame()
+            if cached_data is not None:
+                logger.warning(
+                    f"Empty fetch for {symbol}; serving stale cache", age_seconds=age
+                )
+                return _windowed(cached_data)
+            logger.warning(f"No data found for {symbol} from {source}")
+            return pd.DataFrame()
                 
         except Exception as e:
             logger.error(f"Error getting historical data for {symbol}: {e}")
@@ -183,6 +206,14 @@ class DataService:
             logger.error(f"Error fetching Alpha Vantage data for {symbol}: {e}")
             return pd.DataFrame()
     
+    def _cache_age_seconds(self, symbol: str, source: str) -> Optional[float]:
+        """Age of the on-disk cache file, or None if there is no file."""
+        cache_file = f"{self.data_path}/processed/{symbol}_{source}.parquet"
+        try:
+            return time.time() - os.path.getmtime(cache_file)
+        except OSError:
+            return None
+
     async def _load_cached_data(self, symbol: str, source: str) -> Optional[pd.DataFrame]:
         """Load cached data from disk"""
         try:

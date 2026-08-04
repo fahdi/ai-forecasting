@@ -89,6 +89,10 @@ class Settings(BaseSettings):
         default=252,
         description="Minimum historical data required for forecasting"
     )
+    DATA_CACHE_TTL_HOURS: int = Field(
+        default=12,
+        description="Serve cached market data younger than this; refetch older (stale cache is kept as a fallback when the refetch fails)"
+    )
     
     # Model Parameters
     XGBOOST_PARAMS: Dict[str, Any] = Field(

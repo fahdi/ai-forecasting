@@ -451,3 +451,90 @@ async def test_cache_round_trip_uses_real_parquet_engine(tmp_path):
     assert loaded is not None
     assert len(loaded) == 2
     assert list(loaded["Close"]) == [1.5, 2.5]
+
+
+# ---------------------------------------------------------------------------
+# Cache freshness (TTL) — forecasts must not run on permanently frozen data
+# ---------------------------------------------------------------------------
+
+def _write_cache(svc, symbol: str, mtime_offset_seconds: float = 0.0):
+    import os
+    import time
+    import pandas as pd
+
+    frame = pd.DataFrame(
+        {"Open": [1.0], "Close": [1.5]},
+        index=pd.to_datetime(["2026-08-01"]),
+    )
+    path = f"{svc.data_path}/processed/{symbol}_yahoo.parquet"
+    frame.to_parquet(path)
+    if mtime_offset_seconds:
+        stamp = time.time() - mtime_offset_seconds
+        os.utime(path, (stamp, stamp))
+    return frame
+
+
+@pytest.mark.asyncio
+async def test_fresh_cache_is_served_without_fetching(tmp_path):
+    from unittest.mock import AsyncMock, patch
+    from app.services.data_service import DataService
+
+    svc = DataService()
+    svc.data_path = str(tmp_path)
+    svc._ensure_directories()
+    _write_cache(svc, "FRESH")
+    with patch.object(svc, "_fetch_yahoo_data", new=AsyncMock()) as fetch:
+        result = await svc.get_historical_data("FRESH")
+    fetch.assert_not_awaited()
+    assert len(result) == 1
+
+
+@pytest.mark.asyncio
+async def test_stale_cache_triggers_refetch(tmp_path):
+    import pandas as pd
+    from unittest.mock import AsyncMock, patch
+    from app.services.data_service import DataService
+
+    svc = DataService()
+    svc.data_path = str(tmp_path)
+    svc._ensure_directories()
+    _write_cache(svc, "STALE", mtime_offset_seconds=3 * 24 * 3600)
+    fresh = pd.DataFrame(
+        {"Open": [2.0], "Close": [2.5]},
+        index=pd.to_datetime(["2026-08-04"]),
+    )
+    with patch.object(svc, "_fetch_yahoo_data", new=AsyncMock(return_value=fresh)) as fetch:
+        result = await svc.get_historical_data("STALE")
+    fetch.assert_awaited_once()
+    assert list(result["Close"]) == [2.5]
+
+
+@pytest.mark.asyncio
+async def test_stale_cache_survives_failed_refetch(tmp_path):
+    """Availability fallback: a Yahoo outage must not kill forecasts when we
+    still hold stale-but-usable history."""
+    from unittest.mock import AsyncMock, patch
+    from app.services.data_service import DataService
+
+    svc = DataService()
+    svc.data_path = str(tmp_path)
+    svc._ensure_directories()
+    _write_cache(svc, "FALLBACK", mtime_offset_seconds=3 * 24 * 3600)
+    with patch.object(svc, "_fetch_yahoo_data", new=AsyncMock(side_effect=RuntimeError("yahoo down"))):
+        result = await svc.get_historical_data("FALLBACK")
+    assert list(result["Close"]) == [1.5]
+
+
+@pytest.mark.asyncio
+async def test_stale_cache_survives_empty_refetch(tmp_path):
+    import pandas as pd
+    from unittest.mock import AsyncMock, patch
+    from app.services.data_service import DataService
+
+    svc = DataService()
+    svc.data_path = str(tmp_path)
+    svc._ensure_directories()
+    _write_cache(svc, "EMPTYF", mtime_offset_seconds=3 * 24 * 3600)
+    with patch.object(svc, "_fetch_yahoo_data", new=AsyncMock(return_value=pd.DataFrame())):
+        result = await svc.get_historical_data("EMPTYF")
+    assert list(result["Close"]) == [1.5]
