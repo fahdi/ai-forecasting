@@ -57,6 +57,7 @@ services:
       - FREQTRADE_API_URL=http://freqtrade:8080
       - FREQTRADE_API_USERNAME=${FREQTRADE_API_USERNAME:?set in .env}
       - FREQTRADE_API_PASSWORD=${FREQTRADE_API_PASSWORD:?set in .env}
+      - BACKUP_STATUS_DIR=/app/backups
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,6 +65,9 @@ services:
         condition: service_healthy
     volumes:
       - ./models:/app/models
+      # Read-only view of the host backup dir so /health/detailed can report
+      # backup freshness on the dashboard
+      - /opt/backups/ai-forecasting:/app/backups:ro
       # Market-data cache + uploaded CSVs must survive rebuilds; without this
       # every deploy wiped the cache and each forecast re-downloaded history.
       - api_data:/app/data

@@ -145,6 +145,21 @@ async def detailed_health_check(
         }
         health_status["status"] = "degraded"
     
+    # Nightly backup freshness (BACKUP_STATUS_DIR is the mounted backup dir;
+    # not_configured on hosts without backups, e.g. local dev)
+    try:
+        from app.services.backup_status import backup_status_from_env
+
+        backups = backup_status_from_env()
+        health_status["components"]["backups"] = backups
+        if backups["status"] in ("stale", "missing"):
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["components"]["backups"] = {
+            "status": "unhealthy",
+            "message": f"Backup status check failed: {str(e)}"
+        }
+    
     return health_status
 
 @router.get("/ready")
