@@ -124,6 +124,8 @@ services:
       - AUTH_SECRET=${AUTH_SECRET:?set in .env}
       - DASHBOARD_USERNAME=${DASHBOARD_USERNAME:?set in .env}
       - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:?set in .env}
+      # Additional accounts, "user1:pass1,user2:pass2"
+      - DASHBOARD_USERS=${DASHBOARD_USERS:-}
     depends_on:
       api:
         condition: service_healthy
