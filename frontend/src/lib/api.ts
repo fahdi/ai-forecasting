@@ -69,6 +69,7 @@ export interface RecentForecastJob {
   error_message: string | null;
   last_prediction: number | null;
   mape: number | null;
+  directional_accuracy: number | null;
   confidence: number | null;
 }
 

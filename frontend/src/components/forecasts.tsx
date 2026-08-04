@@ -10,37 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, TrendingUp, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { apiService, ForecastRequest, RecentForecastJob } from "@/lib/api";
+import { apiService, ForecastRequest } from "@/lib/api";
+import { ForecastRow as Forecast, jobToRow } from "@/lib/forecast-rows";
 import { toast } from "sonner";
-
-interface Forecast {
-  id: string;
-  symbol: string;
-  modelType: string;
-  horizon: number;
-  status: "pending" | "running" | "completed" | "failed";
-  prediction: number | null;
-  confidence: number | null;
-  error: string | null;
-  createdAt: string;
-}
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 3 * 60 * 1000;
-
-function jobToRow(job: RecentForecastJob & { confidence?: number | null }): Forecast {
-  return {
-    id: job.job_id,
-    symbol: job.symbol,
-    modelType: job.model_type,
-    horizon: job.forecast_horizon,
-    status: (job.status as Forecast["status"]) ?? "pending",
-    prediction: job.last_prediction,
-    confidence: job.confidence ?? null,
-    error: job.error_message,
-    createdAt: job.created_at,
-  };
-}
 
 export function Forecasts() {
   const [forecasts, setForecasts] = useState<Forecast[]>([]);
@@ -64,8 +39,8 @@ export function Forecasts() {
           const result = await apiService.getForecastResults(jobId);
           const predictions = result.predictions ?? [];
           const last = predictions.length ? predictions[predictions.length - 1].predicted_price : null;
-          const confidence = (result.metadata as { confidence?: number })?.confidence ?? null;
-          patchRow(jobId, { status: "completed", prediction: last, confidence });
+          const hitRate = result.performance_metrics?.directional_accuracy ?? null;
+          patchRow(jobId, { status: "completed", prediction: last, hitRate });
           toast.success("Forecast completed!");
           return;
         }
@@ -160,7 +135,7 @@ export function Forecasts() {
         horizon: newForecast.horizon,
         status: "pending",
         prediction: null,
-        confidence: null,
+        hitRate: null,
         error: null,
         createdAt: new Date().toISOString()
       };
@@ -268,7 +243,7 @@ export function Forecasts() {
                   <TableHead>Model</TableHead>
                   <TableHead>Horizon</TableHead>
                   <TableHead>Prediction</TableHead>
-                  <TableHead>Confidence</TableHead>
+                  <TableHead title="Directional accuracy on held-out data">Hit Rate (holdout)</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
                 </TableRow>
@@ -293,7 +268,7 @@ export function Forecasts() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {forecast.confidence !== null ? `${(forecast.confidence * 100).toFixed(0)}%` : "n/a"}
+                      {forecast.hitRate !== null ? `${forecast.hitRate.toFixed(0)}%` : "n/a"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
