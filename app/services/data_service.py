@@ -18,6 +18,30 @@ from app.core.monitoring import record_data_points_processed
 
 logger = structlog.get_logger()
 
+# Friendly names people actually type -> Yahoo Finance tickers. Anything not
+# in the map passes through unchanged (uppercased), so real tickers still work.
+SYMBOL_ALIASES = {
+    "XAU": "GC=F",      # gold spot -> COMEX gold futures
+    "GOLD": "GC=F",
+    "XAG": "SI=F",      # silver
+    "SILVER": "SI=F",
+    "OIL": "CL=F",      # WTI crude
+    "WTI": "CL=F",
+    "BRENT": "BZ=F",
+    "BTC": "BTC-USD",
+    "ETH": "ETH-USD",
+    "SOL": "SOL-USD",
+    "BNB": "BNB-USD",
+    "SPX": "^GSPC",
+    "NDX": "^NDX",
+    "DJI": "^DJI",
+}
+
+def normalize_symbol(symbol: str) -> str:
+    """Map a user-facing symbol to its data-source ticker."""
+    cleaned = symbol.strip().upper()
+    return SYMBOL_ALIASES.get(cleaned, cleaned)
+
 class DataService:
     """Service for data management and processing"""
     
@@ -52,6 +76,7 @@ class DataService:
             DataFrame with OHLCV data
         """
         try:
+            symbol = normalize_symbol(symbol)
             # Check if we have cached data
             cached_data = await self._load_cached_data(symbol, source)
             

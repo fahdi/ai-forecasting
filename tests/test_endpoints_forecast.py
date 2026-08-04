@@ -6,10 +6,9 @@ database helpers (create_forecast_job / get_forecast_job / update_forecast_job)
 are patched in the endpoint namespace, so no live database is needed.
 Background task functions are exercised by awaiting them directly.
 
-NOTE on known bugs (tested as current behavior, not fixed here):
-- /batch and /results wrap intentional HTTPException(400/404)s in a blanket
-  `except Exception` and re-raise them as 500 (only /status re-raises
-  HTTPException correctly).
+The blanket-except bugs previously pinned here (/batch and /results
+re-raising intentional 400/404s as 500) were fixed as part of making the
+forecast pipeline real; these tests now assert the intended status codes.
 """
 
 from datetime import datetime
@@ -62,6 +61,7 @@ def make_job(**overrides) -> SimpleNamespace:
         completed_at=None,
         error_message=None,
         result_path=None,
+        result_json=None,
         metadata={"include_confidence": True},
     )
     for key, value in overrides.items():
@@ -130,9 +130,7 @@ class TestBatchForecast:
             response = client.post(
                 "/api/v1/forecast/batch", json={"symbols": symbols}
             )
-        # BUG(flagged): intended 400 is swallowed by the blanket except and
-        # surfaces as 500 with the original status in the detail text.
-        assert response.status_code == 500
+        assert response.status_code == 400
         assert "Maximum 100 symbols" in response.json()["detail"]
 
     def test_create_batch_forecast_db_error_returns_500(self):
@@ -175,30 +173,31 @@ class TestForecastStatus:
 class TestForecastResults:
     def test_results_completed(self):
         job = make_job(status="completed", result_path="results/job-1.json",
-                       metadata={"symbols": ["AAPL"]})
+                       result_json={
+                           "metadata": {"symbol": "AAPL"},
+                           "predictions": [{"date": "2026-01-02", "value": 190.0}],
+                           "performance_metrics": {"mape": 1.5},
+                       })
         with patch(f"{NS}.get_forecast_job", new=AsyncMock(return_value=job)):
             response = client.get("/api/v1/forecast/results/job-1")
         assert response.status_code == 200
         body = response.json()
         assert body["job_id"] == "job-1"
         assert body["status"] == "completed"
-        assert body["result_path"] == "results/job-1.json"
-        assert body["metadata"] == {"symbols": ["AAPL"]}
+        assert body["predictions"] == [{"date": "2026-01-02", "value": 190.0}]
+        assert body["metadata"] == {"symbol": "AAPL"}
 
     def test_results_not_found(self):
         with patch(f"{NS}.get_forecast_job", new=AsyncMock(return_value=None)):
             response = client.get("/api/v1/forecast/results/missing")
-        # BUG(flagged): intended 404 surfaces as 500 (unlike /status, this
-        # handler does not re-raise HTTPException).
-        assert response.status_code == 500
+        assert response.status_code == 404
         assert "Job not found" in response.json()["detail"]
 
     def test_results_job_not_completed(self):
         job = make_job(status="running")
         with patch(f"{NS}.get_forecast_job", new=AsyncMock(return_value=job)):
             response = client.get("/api/v1/forecast/results/job-1")
-        # BUG(flagged): intended 400 surfaces as 500.
-        assert response.status_code == 500
+        assert response.status_code == 400
         assert "Job status is running, not completed" in response.json()["detail"]
 
 

@@ -59,6 +59,7 @@ class ForecastJob(Base):
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(Text, nullable=True)
     result_path = Column(String(500), nullable=True)
+    result_json = Column(JSON, nullable=True)
     job_metadata = Column(JSON, nullable=True)
 
 class ModelPerformance(Base):
@@ -125,6 +126,13 @@ async def init_db():
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            # Micro-migration: result_json was added after first deploys.
+            # create_all never alters existing tables, so patch Postgres here.
+            if engine.dialect.name == "postgresql":
+                from sqlalchemy import text
+                await conn.execute(text(
+                    "ALTER TABLE forecast_jobs ADD COLUMN IF NOT EXISTS result_json JSON"
+                ))
         logger.info("Database tables created successfully")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
@@ -174,7 +182,8 @@ async def update_forecast_job(
     job_id: str,
     status: str,
     result_path: str = None,
-    error_message: str = None
+    error_message: str = None,
+    result_json: dict = None
 ) -> ForecastJob:
     """Update forecast job status"""
     job = await get_forecast_job(db, job_id)
@@ -184,6 +193,7 @@ async def update_forecast_job(
         if status == "completed":
             job.completed_at = datetime.utcnow()
             job.result_path = result_path
+            job.result_json = result_json
         elif status == "failed":
             job.error_message = error_message
         await db.commit()
@@ -195,6 +205,13 @@ async def get_forecast_job(db: AsyncSession, job_id: str) -> ForecastJob:
     so a Session.get PK lookup would never match)."""
     result = await db.execute(select(ForecastJob).where(ForecastJob.job_id == job_id))
     return result.scalar_one_or_none()
+
+async def get_recent_forecast_jobs(db: AsyncSession, limit: int = 20) -> list:
+    """Most recent forecast jobs, newest first (dashboard feed)."""
+    result = await db.execute(
+        select(ForecastJob).order_by(ForecastJob.created_at.desc()).limit(limit)
+    )
+    return list(result.scalars().all())
 
 async def save_model_performance(
     db: AsyncSession,

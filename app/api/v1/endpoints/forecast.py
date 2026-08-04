@@ -12,7 +12,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from app.core.database import get_db, create_forecast_job, update_forecast_job, get_forecast_job
+from app.core.database import (
+    get_db,
+    create_forecast_job,
+    update_forecast_job,
+    get_forecast_job,
+    get_recent_forecast_jobs,
+)
 from app.services.forecast_service import ForecastService
 from app.services.data_service import DataService
 from app.core.monitoring import record_forecast_request, record_forecast_duration
@@ -202,6 +208,8 @@ async def create_batch_forecast(
             estimated_completion=estimated_completion
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating batch forecast: {e}")
         for symbol in request.symbols:
@@ -260,17 +268,54 @@ async def get_forecast_results(
                 detail=f"Job status is {job.status}, not completed"
             )
         
-        # TODO: Load results from storage
-        # For now, return a placeholder
+        if not job.result_json:
+            # Jobs completed before result persistence existed have no payload.
+            raise HTTPException(
+                status_code=410,
+                detail="Result payload not stored for this job; re-run the forecast"
+            )
+        
         return {
             "job_id": job.job_id,
             "status": job.status,
-            "result_path": job.result_path,
-            "metadata": job.metadata
+            **job.result_json,
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting forecast results: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/recent")
+async def get_recent_forecasts(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db)
+):
+    """Recent forecast jobs with a compact prediction summary (dashboard feed)."""
+    try:
+        limit = max(1, min(limit, 100))
+        jobs = await get_recent_forecast_jobs(db, limit=limit)
+        payload = []
+        for job in jobs:
+            predictions = (job.result_json or {}).get("predictions") or []
+            last_prediction = predictions[-1].get("value") if predictions else None
+            metrics = (job.result_json or {}).get("performance_metrics") or {}
+            payload.append({
+                "job_id": job.job_id,
+                "symbol": job.symbol,
+                "status": job.status,
+                "model_type": job.model_type,
+                "forecast_horizon": job.forecast_horizon,
+                "created_at": job.created_at,
+                "completed_at": job.completed_at,
+                "error_message": job.error_message,
+                "last_prediction": last_prediction,
+                "mape": metrics.get("mape"),
+            })
+        return {"jobs": payload}
+    except Exception as e:
+        logger.error(f"Error listing recent forecasts: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 async def process_single_forecast(
@@ -310,13 +355,14 @@ async def process_single_forecast(
             include_features=include_features
         )
         
-        # Save results
+        # Persist the computed result on the job row
         result_path = f"results/{job_id}.json"
-        # TODO: Save forecast_result to storage
-        
-        # Update job status to completed
         async with AsyncSessionLocal() as db:
-            await update_forecast_job(db, job_id, "completed", result_path=result_path)
+            await update_forecast_job(
+                db, job_id, "completed",
+                result_path=result_path,
+                result_json=forecast_result,
+            )
         
         # Record metrics
         duration = (datetime.utcnow() - start_time).total_seconds()
@@ -392,13 +438,14 @@ async def process_batch_forecast(
                 logger.error(f"Error processing {symbol}: {e}")
                 record_forecast_request(model_type, symbol, "failed")
         
-        # Save batch results
+        # Persist per-symbol results on the job row
         result_path = f"results/{job_id}.json"
-        # TODO: Save results to storage
-        
-        # Update job status to completed
         async with AsyncSessionLocal() as db:
-            await update_forecast_job(db, job_id, "completed", result_path=result_path)
+            await update_forecast_job(
+                db, job_id, "completed",
+                result_path=result_path,
+                result_json={"batch_results": results},
+            )
         
         # Record metrics
         duration = (datetime.utcnow() - start_time).total_seconds()

@@ -402,9 +402,7 @@ def test_batch_forecast_too_many_symbols():
     resp = client.post(
         f"{API}/batch", json={"symbols": [f"S{i}" for i in range(101)]}
     )
-    # The 400 HTTPException is swallowed by the blanket except and re-raised
-    # as a 500 (see report: bug).
-    assert resp.status_code == 500
+    assert resp.status_code == 400
     assert "Maximum 100 symbols" in resp.json()["detail"]
 
 
@@ -434,12 +432,10 @@ def test_get_status_db_error():
     assert resp.json()["detail"] == "db err"
 
 
-def test_get_results_not_found_becomes_500():
-    # The 404 HTTPException is caught by the blanket except and converted to
-    # a 500 (see report: bug).
+def test_get_results_not_found_is_404():
     resp = client.get(f"{API}/results/{uuid.uuid4()}")
-    assert resp.status_code == 500
-    assert resp.json()["detail"] == "404: Job not found"
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Job not found"
 
 
 def test_get_results_not_completed():
@@ -449,9 +445,7 @@ def test_get_results_not_completed():
     job_id = resp.json()["job_id"]
 
     results = client.get(f"{API}/results/{job_id}")
-    # The 400 HTTPException is likewise converted to a 500 by the blanket
-    # except clause.
-    assert results.status_code == 500
+    assert results.status_code == 400
     assert "not completed" in results.json()["detail"]
 
 
@@ -467,10 +461,8 @@ def test_get_results_completed():
     job_id = resp.json()["job_id"]
     assert client.get(f"{API}/status/{job_id}").json()["status"] == "completed"
 
-    # `job.metadata` on line 269 resolves to the SQLAlchemy MetaData object
-    # (the column is `job_metadata`), which blows up response serialization
-    # with a RecursionError (see report: bug). The endpoint body itself runs
-    # to completion; suppress the server-side serialization explosion.
-    lenient = TestClient(app, raise_server_exceptions=False)
-    results = lenient.get(f"{API}/results/{job_id}")
-    assert results.status_code == 500
+    results = client.get(f"{API}/results/{job_id}")
+    assert results.status_code == 200
+    body = results.json()
+    assert body["predictions"] == []
+    assert body["metadata"] == {}
