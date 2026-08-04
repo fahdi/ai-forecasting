@@ -49,7 +49,10 @@ services:
           memory: 128M
 
   api:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/${POSTGRES_DB:-ai_forecasting}
       - REDIS_URL=redis://redis:6379/0

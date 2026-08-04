@@ -89,6 +89,10 @@ class Settings(BaseSettings):
         default=252,
         description="Minimum historical data required for forecasting"
     )
+    GIT_SHA: str = Field(
+        default="unknown",
+        description="Git commit baked into the image at build time (deploy observability)"
+    )
     FORECAST_REUSE_TTL_MINUTES: int = Field(
         default=60,
         description="Reuse a completed forecast for the same symbol/horizon/model this recent instead of retraining"

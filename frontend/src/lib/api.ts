@@ -96,6 +96,7 @@ export interface DetailedHealth {
 
 export interface AppSettings {
   version: string;
+  git_sha: string;
   rate_limit_per_minute: number;
   rate_limit_per_hour: number;
   default_forecast_horizon: number;

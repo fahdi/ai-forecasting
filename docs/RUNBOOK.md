@@ -15,7 +15,10 @@ reverse-proxy. SSH via `iSuperCoder.com/infra/production/server-login.sh`.
    `HEALTHCHECKS_URL`, Telegram vars). No secrets in git; `chmod 600 .env`.
 2. Copy the trained registry (gitignored):
    `tar -C models -czf - registry | ssh <vps> 'tar -C /opt/ai-forecasting/models -xzf -'`
-3. `docker compose -f docker-compose.prod.yml up -d --build` — no host ports;
+3. Deploys: `scripts/deploy_prod.sh [services]` — pulls main, builds with
+   the git SHA baked in, waits for health, and fails on version mismatch.
+   The live SHA shows in the dashboard Settings tab and `/api/v1/settings`.
+   First bring-up: `docker compose -f docker-compose.prod.yml up -d --build` — no host ports;
    only the `forecasts-dashboard` container joins the platform proxy network
    (`production_isupercoder-simple`). Nginx routing lives in
    `iSuperCoder.com/infra/production/nginx/production.conf`.

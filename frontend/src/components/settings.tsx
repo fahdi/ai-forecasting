@@ -57,7 +57,7 @@ export function Settings() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <Row label="Version" value={config.version} />
+              <Row label="Version" value={`${config.version} (${config.git_sha})`} />
               <Row label="Rate Limit" value={`${config.rate_limit_per_minute} req/min`} />
               <Row label="Hourly Limit" value={`${config.rate_limit_per_hour} req/hour`} />
             </div>

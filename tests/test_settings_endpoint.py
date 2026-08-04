@@ -21,6 +21,7 @@ def test_settings_returns_safe_config():
     assert isinstance(body["yahoo_finance_enabled"], bool)
     assert isinstance(body["alpha_vantage_enabled"], bool)
     assert body["version"]
+    assert body["git_sha"]  # "unknown" outside built images, never absent
 
 
 def test_settings_never_exposes_secrets():
@@ -28,3 +29,19 @@ def test_settings_never_exposes_secrets():
     flattened = str(body).lower()
     for needle in ("secret", "password", "api_key", "dsn", "postgresql://", "redis://"):
         assert needle not in flattened
+
+
+def test_git_sha_comes_from_environment(monkeypatch):
+    """The image bakes GIT_SHA at build time; a fresh Settings() must pick
+    it up so /settings reports exactly what is deployed."""
+    monkeypatch.setenv("GIT_SHA", "abc1234")
+    from app.core.config import Settings
+
+    assert Settings().GIT_SHA == "abc1234"
+
+
+def test_git_sha_defaults_to_unknown(monkeypatch):
+    monkeypatch.delenv("GIT_SHA", raising=False)
+    from app.core.config import Settings
+
+    assert Settings().GIT_SHA == "unknown"

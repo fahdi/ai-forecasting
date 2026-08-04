@@ -16,6 +16,7 @@ def get_app_settings():
     """Safe subset of runtime configuration."""
     return {
         "version": settings.VERSION,
+        "git_sha": settings.GIT_SHA,
         "rate_limit_per_minute": settings.RATE_LIMIT_PER_MINUTE,
         "rate_limit_per_hour": settings.RATE_LIMIT_PER_HOUR,
         "default_forecast_horizon": settings.DEFAULT_FORECAST_HORIZON,

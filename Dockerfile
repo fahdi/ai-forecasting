@@ -35,6 +35,8 @@ RUN useradd --create-home --shell /bin/bash app && \
 USER app
 
 # Expose port
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
 EXPOSE 8000
 
 # Health check
