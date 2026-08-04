@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, TrendingUp, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
-import { apiService, ForecastRequest } from "@/lib/api";
+import { apiService, ForecastRequest, RecentForecastJob } from "@/lib/api";
 import { toast } from "sonner";
 
 interface Forecast {
@@ -19,9 +19,27 @@ interface Forecast {
   modelType: string;
   horizon: number;
   status: "pending" | "running" | "completed" | "failed";
-  prediction: number;
-  confidence: number;
+  prediction: number | null;
+  confidence: number | null;
+  error: string | null;
   createdAt: string;
+}
+
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 3 * 60 * 1000;
+
+function jobToRow(job: RecentForecastJob & { confidence?: number | null }): Forecast {
+  return {
+    id: job.job_id,
+    symbol: job.symbol,
+    modelType: job.model_type,
+    horizon: job.forecast_horizon,
+    status: (job.status as Forecast["status"]) ?? "pending",
+    prediction: job.last_prediction,
+    confidence: job.confidence ?? null,
+    error: job.error_message,
+    createdAt: job.created_at,
+  };
 }
 
 export function Forecasts() {
@@ -32,6 +50,65 @@ export function Forecasts() {
     modelType: "ensemble",
     horizon: 7
   });
+  const pollTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const patchRow = useCallback((id: string, patch: Partial<Forecast>) => {
+    setForecasts(prev => prev.map(row => (row.id === id ? { ...row, ...patch } : row)));
+  }, []);
+
+  const pollJob = useCallback((jobId: string, startedAt: number) => {
+    const tick = async () => {
+      try {
+        const status = await apiService.getForecastStatus(jobId);
+        if (status.status === "completed") {
+          const result = await apiService.getForecastResults(jobId);
+          const predictions = result.predictions ?? [];
+          const last = predictions.length ? predictions[predictions.length - 1].predicted_price : null;
+          const confidence = (result.metadata as { confidence?: number })?.confidence ?? null;
+          patchRow(jobId, { status: "completed", prediction: last, confidence });
+          toast.success("Forecast completed!");
+          return;
+        }
+        if (status.status === "failed") {
+          const message = (status as { error_message?: string }).error_message ?? "Forecast failed";
+          patchRow(jobId, { status: "failed", error: message });
+          toast.error(message);
+          return;
+        }
+        patchRow(jobId, { status: status.status as Forecast["status"] });
+        if (Date.now() - startedAt < POLL_TIMEOUT_MS) {
+          pollTimers.current.set(jobId, setTimeout(tick, POLL_INTERVAL_MS));
+        } else {
+          patchRow(jobId, { status: "failed", error: "Timed out waiting for result" });
+        }
+      } catch {
+        if (Date.now() - startedAt < POLL_TIMEOUT_MS) {
+          pollTimers.current.set(jobId, setTimeout(tick, POLL_INTERVAL_MS));
+        }
+      }
+    };
+    pollTimers.current.set(jobId, setTimeout(tick, POLL_INTERVAL_MS));
+  }, [patchRow]);
+
+  useEffect(() => {
+    const timers = pollTimers.current;
+    const load = async () => {
+      try {
+        const jobs = await apiService.getRecentForecasts(50);
+        setForecasts(jobs.map(jobToRow));
+        // Resume polling for jobs still in flight (e.g. after a page reload)
+        jobs.filter(j => j.status === "pending" || j.status === "running")
+            .forEach(j => pollJob(j.job_id, Date.now()));
+      } catch {
+        toast.error("Could not load recent forecasts");
+      }
+    };
+    load();
+    return () => {
+      timers.forEach(t => clearTimeout(t));
+      timers.clear();
+    };
+  }, [pollJob]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -59,7 +136,7 @@ export function Forecasts() {
 
   const handleCreateForecast = async () => {
     if (!newForecast.symbol) {
-      toast.error("Please enter a stock symbol");
+      toast.error("Please enter a symbol (e.g. AAPL, XAU, BTC)");
       return;
     }
 
@@ -82,14 +159,16 @@ export function Forecasts() {
         modelType: newForecast.modelType,
         horizon: newForecast.horizon,
         status: "pending",
-        prediction: 0,
-        confidence: 0,
+        prediction: null,
+        confidence: null,
+        error: null,
         createdAt: new Date().toISOString()
       };
 
       setForecasts(prev => [newForecastItem, ...prev]);
       setNewForecast({ symbol: "", modelType: "ensemble", horizon: 7 });
-      toast.success("Forecast job created successfully!");
+      toast.success("Forecast started. This can take a minute.");
+      pollJob(response.job_id, Date.now());
     } catch (error) {
       console.error("Error creating forecast:", error);
       toast.error("Failed to create forecast. Please try again.");
@@ -117,10 +196,10 @@ export function Forecasts() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="symbol">Stock Symbol</Label>
+              <Label htmlFor="symbol">Symbol</Label>
               <Input
                 id="symbol"
-                placeholder="AAPL"
+                placeholder="AAPL, XAU, BTC, OIL..."
                 value={newForecast.symbol}
                 onChange={(e) => setNewForecast({ ...newForecast, symbol: e.target.value.toUpperCase() })}
               />
@@ -203,10 +282,18 @@ export function Forecasts() {
                     </TableCell>
                     <TableCell>{forecast.horizon} days</TableCell>
                     <TableCell>
-                      {forecast.prediction > 0 ? `$${forecast.prediction.toFixed(2)}` : "Pending"}
+                      {forecast.status === "failed" ? (
+                        <span className="text-sm text-destructive" title={forecast.error ?? undefined}>
+                          {forecast.error ?? "failed"}
+                        </span>
+                      ) : forecast.prediction !== null ? (
+                        `$${forecast.prediction.toFixed(2)}`
+                      ) : (
+                        "Pending"
+                      )}
                     </TableCell>
                     <TableCell>
-                      {forecast.confidence > 0 ? `${forecast.confidence}%` : "Pending"}
+                      {forecast.confidence !== null ? `${(forecast.confidence * 100).toFixed(0)}%` : "n/a"}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">

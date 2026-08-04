@@ -18,7 +18,7 @@ export default function Home() {
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard":
-        return <Dashboard />;
+        return <Dashboard onNavigate={(tab) => setActiveTab(tab as TabType)} />;
       case "forecasts":
         return <Forecasts />;
       case "models":
@@ -32,7 +32,7 @@ export default function Home() {
       case "settings":
         return <Settings />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigate={(tab) => setActiveTab(tab as TabType)} />;
     }
   };
 

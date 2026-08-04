@@ -299,8 +299,10 @@ async def get_recent_forecasts(
         payload = []
         for job in jobs:
             predictions = (job.result_json or {}).get("predictions") or []
-            last_prediction = predictions[-1].get("value") if predictions else None
+            last = predictions[-1] if predictions else {}
+            last_prediction = last.get("predicted_price", last.get("value"))
             metrics = (job.result_json or {}).get("performance_metrics") or {}
+            metadata = (job.result_json or {}).get("metadata") or {}
             payload.append({
                 "job_id": job.job_id,
                 "symbol": job.symbol,
@@ -312,6 +314,7 @@ async def get_recent_forecasts(
                 "error_message": job.error_message,
                 "last_prediction": last_prediction,
                 "mape": metrics.get("mape"),
+                "confidence": metadata.get("confidence"),
             })
         return {"jobs": payload}
     except Exception as e:

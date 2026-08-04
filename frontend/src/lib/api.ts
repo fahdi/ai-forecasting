@@ -25,7 +25,8 @@ export interface ForecastResult {
   };
   predictions: Array<{
     date: string;
-    value: number;
+    predicted_price: number;
+    probability_up?: number;
     confidence_lower?: number;
     confidence_upper?: number;
   }>;
@@ -40,19 +41,66 @@ export interface ForecastResult {
 export interface ModelPerformance {
   model_type: string;
   symbol: string;
-  accuracy: number;
-  mape: number;
-  mae: number;
-  rmse: number;
-  directional_accuracy: number;
-  last_updated: string;
+  version: string;
+  mape: number | null;
+  mae: number | null;
+  rmse: number | null;
+  directional_accuracy: number | null;
+  training_date: string | null;
 }
 
-export interface DataSymbol {
+export interface ModelInfo {
+  model_type: string;
   symbol: string;
-  source: string;
-  last_updated: string;
-  data_points: number;
+  version: string;
+  last_trained: string | null;
+  performance?: Record<string, number> | null;
+  file_size?: number | null;
+}
+
+export interface RecentForecastJob {
+  job_id: string;
+  symbol: string;
+  status: string;
+  model_type: string;
+  forecast_horizon: number;
+  created_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+  last_prediction: number | null;
+  mape: number | null;
+  confidence: number | null;
+}
+
+export interface DataSourceInfo {
+  name: string;
+  description?: string;
+  enabled: boolean;
+}
+
+export interface DataStats {
+  total_symbols: number;
+  total_data_points: number;
+  data_sources: Record<string, number>;
+  last_updated: string | null;
+  storage_size: number;
+}
+
+export interface DetailedHealth {
+  status: string;
+  components: Record<string, { status: string; [key: string]: unknown }>;
+}
+
+export interface AppSettings {
+  version: string;
+  rate_limit_per_minute: number;
+  rate_limit_per_hour: number;
+  default_forecast_horizon: number;
+  max_forecast_horizon: number;
+  min_historical_data_days: number;
+  model_cache_size: number;
+  yahoo_finance_enabled: boolean;
+  alpha_vantage_enabled: boolean;
 }
 
 class ApiService {
@@ -88,7 +136,7 @@ class ApiService {
 
   // Get forecast status
   async getForecastStatus(jobId: string) {
-    return this.request<{ status: string; progress?: number; result?: ForecastResult }>(`/api/v1/forecast/status/${jobId}`);
+    return this.request<{ status: string; error_message?: string | null; result?: ForecastResult }>(`/api/v1/forecast/status/${jobId}`);
   }
 
   // Get forecast results
@@ -96,19 +144,57 @@ class ApiService {
     return this.request<ForecastResult>(`/api/v1/forecast/results/${jobId}`);
   }
 
-  // Get model performance
+  // Get model performance (backend wraps the list)
   async getModelPerformance(): Promise<ModelPerformance[]> {
-    return this.request<ModelPerformance[]>('/api/v1/models/performance');
+    const body = await this.request<{ performances: ModelPerformance[]; total_count: number }>(
+      '/api/v1/models/performance',
+    );
+    return body.performances;
   }
 
-  // Get available symbols
-  async getSymbols(): Promise<DataSymbol[]> {
-    return this.request<DataSymbol[]>('/api/v1/data/symbols');
+  // List trained models
+  async getModels(): Promise<ModelInfo[]> {
+    const body = await this.request<{ models: ModelInfo[]; total_count: number }>(
+      '/api/v1/models/list',
+    );
+    return body.models;
   }
 
-  // Get data sources
-  async getDataSources() {
-    return this.request<{ sources: string[] }>('/api/v1/data/sources');
+  // Recent forecast jobs (dashboard feed)
+  async getRecentForecasts(limit = 20): Promise<RecentForecastJob[]> {
+    const body = await this.request<{ jobs: RecentForecastJob[] }>(
+      `/api/v1/forecast/recent?limit=${limit}`,
+    );
+    return body.jobs;
+  }
+
+  // Get available symbols (backend wraps the list)
+  async getSymbols(): Promise<string[]> {
+    const body = await this.request<{ symbols: string[]; total_count: number }>(
+      '/api/v1/data/symbols',
+    );
+    return body.symbols;
+  }
+
+  // Get data sources (objects with enabled flags)
+  async getDataSources(): Promise<DataSourceInfo[]> {
+    const body = await this.request<{ sources: DataSourceInfo[] }>('/api/v1/data/sources');
+    return body.sources;
+  }
+
+  // Data storage statistics
+  async getDataStats(): Promise<DataStats> {
+    return this.request<DataStats>('/api/v1/data/stats');
+  }
+
+  // Component-level health (DB, Redis, storage, ML libs)
+  async getDetailedHealth(): Promise<DetailedHealth> {
+    return this.request<DetailedHealth>('/api/v1/health/detailed');
+  }
+
+  // Read-only runtime configuration
+  async getAppSettings(): Promise<AppSettings> {
+    return this.request<AppSettings>('/api/v1/settings');
   }
 
   // Upload data

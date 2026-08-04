@@ -2,7 +2,7 @@
  * Server-side proxy to the freqtrade REST API. Read-only by design: only a
  * whitelist of GET endpoints is forwarded, so the public dashboard can never
  * reach trade-mutating endpoints (forcebuy/forcesell/stop/...). Credentials
- * stay server-side — nothing NEXT_PUBLIC.
+ * stay server-side, nothing NEXT_PUBLIC.
  */
 import { NextRequest, NextResponse } from 'next/server';
 

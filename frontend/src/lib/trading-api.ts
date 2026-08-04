@@ -1,6 +1,6 @@
 // Both upstreams are reached through the Next.js server-side proxy routes,
 // which the auth middleware gates. Freqtrade credentials live server-side
-// in the proxy — never in NEXT_PUBLIC_* vars shipped to the browser.
+// in the proxy, never in NEXT_PUBLIC_* vars shipped to the browser.
 const SIGNAL_API_BASE_URL = '/api/upstream/signal';
 const FREQTRADE_BASE_URL = '/api/upstream/freqtrade';
 

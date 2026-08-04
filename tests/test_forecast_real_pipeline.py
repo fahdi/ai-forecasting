@@ -189,8 +189,8 @@ class TestRecentEndpoint:
             make_job(job_id="job-2", symbol="AAPL", result_json={
                 "metadata": {"symbol": "AAPL"},
                 "predictions": [
-                    {"date": "2026-08-05", "value": 210.0},
-                    {"date": "2026-08-06", "value": 215.0},
+                    {"date": "2026-08-05", "predicted_price": 210.0},
+                    {"date": "2026-08-06", "predicted_price": 215.0},
                 ],
                 "performance_metrics": {"mape": 2.0},
             }),
@@ -211,6 +211,7 @@ class TestRecentEndpoint:
         assert failed["status"] == "failed"
         assert failed["error_message"] == "No historical data"
         assert failed["last_prediction"] is None
+        assert failed["confidence"] is None
 
     def test_recent_respects_limit_param(self):
         capture = AsyncMock(return_value=[])
