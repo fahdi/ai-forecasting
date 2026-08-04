@@ -65,8 +65,14 @@ class TestBinanceRestCandleSource:
                                        "close", "volume"]
         assert http_get.call_args.kwargs["params"]["symbol"] == "BTCUSDT"
 
-    def test_default_candle_source_is_binance(self):
-        assert isinstance(get_candle_source(), BinanceRestCandleSource)
+    def test_default_candle_source_is_binance_first(self):
+        from app.services.signal_service import FallbackCandleSource
+
+        source = get_candle_source()
+        if isinstance(source, FallbackCandleSource):
+            assert isinstance(source._primary, BinanceRestCandleSource)
+        else:
+            assert isinstance(source, BinanceRestCandleSource)
 
 
 class TestFetchBinancePage:

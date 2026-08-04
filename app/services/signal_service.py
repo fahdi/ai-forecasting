@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Protocol
 
 import numpy as np
 import pandas as pd
+import structlog
 
 from app.models.crypto_features import WARMUP_BARS
 
@@ -31,6 +32,8 @@ STALE_AFTER = 2 * INTERVAL_DELTA
 CANDLE_LIMIT = 200
 
 MODEL_VERSION = "baseline-momentum-v0"
+
+logger = structlog.get_logger()
 
 
 class InsufficientDataError(Exception):
@@ -78,9 +81,58 @@ class BinanceRestCandleSource:
         return frame.drop(columns=["close_time"]).reset_index(drop=True)
 
 
+class DatabaseCandleSource:
+    """Fallback source: klines previously ingested into the database. The
+    data may be old (ingestor down, exchange unreachable) — the signal's
+    stale flag (R9) carries that honestly, so the bot's fail-closed
+    contract is unchanged."""
+
+    def __init__(self, engine):
+        self._engine = engine
+
+    def get_recent_candles(self, symbol: str, interval: str, limit: int) -> pd.DataFrame:
+        from app.services.kline_store import load_klines
+
+        frame = load_klines(self._engine, symbol, interval)
+        return frame.tail(limit).reset_index(drop=True)
+
+
+class FallbackCandleSource:
+    """Primary source with a fallback when it raises or returns nothing."""
+
+    def __init__(self, primary: CandleSource, fallback: CandleSource):
+        self._primary = primary
+        self._fallback = fallback
+
+    def get_recent_candles(self, symbol: str, interval: str, limit: int) -> pd.DataFrame:
+        try:
+            frame = self._primary.get_recent_candles(symbol, interval, limit)
+            if frame is not None and not frame.empty:
+                return frame
+            logger.warning("Primary candle source empty; using database fallback", symbol=symbol)
+        except Exception as exc:
+            logger.warning(
+                "Primary candle source failed; using database fallback",
+                symbol=symbol,
+                error=str(exc),
+            )
+        return self._fallback.get_recent_candles(symbol, interval, limit)
+
+
+def _resolve_kline_engine():
+    """Engine for the klines table (shared with the prediction log)."""
+    from app.api.v1.endpoints.models import get_health_engine
+
+    return get_health_engine()
+
+
 def get_candle_source() -> CandleSource:
     """FastAPI dependency — override in tests."""
-    return BinanceRestCandleSource()
+    primary = BinanceRestCandleSource()
+    engine = _resolve_kline_engine()
+    if engine is None:
+        return primary
+    return FallbackCandleSource(primary, DatabaseCandleSource(engine))
 
 
 def normalize_pair(raw: str) -> Optional[str]:

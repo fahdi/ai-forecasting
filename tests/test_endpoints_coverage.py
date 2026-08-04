@@ -803,7 +803,15 @@ def test_binance_rest_candle_source(monkeypatch):
 
 
 def test_get_candle_source_default():
-    assert isinstance(get_candle_source(), BinanceRestCandleSource)
+    from app.services.signal_service import FallbackCandleSource
+
+    source = get_candle_source()
+    # With a database available the default is Binance wrapped in a DB
+    # fallback; without one it degrades to plain Binance.
+    if isinstance(source, FallbackCandleSource):
+        assert isinstance(source._primary, BinanceRestCandleSource)
+    else:
+        assert isinstance(source, BinanceRestCandleSource)
 
 
 def test_normalize_pair():
