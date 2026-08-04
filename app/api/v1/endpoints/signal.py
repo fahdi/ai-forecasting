@@ -43,6 +43,7 @@ class SignalResponse(BaseModel):
     top_features: List[Dict[str, Any]]
     model_version: str
     generated_at: str
+    data_as_of: str
     stale: bool
 
 

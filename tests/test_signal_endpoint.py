@@ -72,6 +72,9 @@ class TestContract:
         assert body["model_version"]
         assert body["generated_at"]
         assert body["stale"] is False
+        # data_as_of carries the last candle's timestamp so stale data is
+        # quantifiable, not just a boolean badge
+        assert body["data_as_of"]
 
     def test_pair_format_variants_normalize(self, client):
         use_source(FakeCandleSource(trend="up"))

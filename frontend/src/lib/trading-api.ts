@@ -25,6 +25,7 @@ export interface TradingSignal {
   top_features: SignalFeature[];
   model_version: string;
   generated_at: string;
+  data_as_of: string;
   stale: boolean;
 }
 

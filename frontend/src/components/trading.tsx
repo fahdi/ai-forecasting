@@ -207,9 +207,10 @@ function SignalFeed({ signals }: { signals: SignalMap }) {
                       <Badge
                         variant="outline"
                         className="border-yellow-500 text-yellow-600 dark:text-yellow-400"
+                        title="Signal computed from the newest available candles, which are no longer current"
                       >
                         <AlertTriangle className="mr-1 h-3 w-3" />
-                        stale
+                        stale: data as of {new Date(state.signal.data_as_of).toLocaleDateString()}
                       </Badge>
                     )}
 

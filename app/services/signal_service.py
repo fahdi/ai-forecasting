@@ -153,6 +153,7 @@ class Signal:
     top_features: List[Dict[str, Any]]
     model_version: str
     generated_at: str
+    data_as_of: str
     stale: bool
 
 
@@ -194,6 +195,7 @@ def _ensemble_signal(symbol: str, candles: pd.DataFrame, predictor) -> Signal:
         top_features=top_features,
         model_version=predictor.version_id,
         generated_at=datetime.now(timezone.utc).isoformat(),
+        data_as_of=candles["open_time"].iloc[-1].isoformat(),
         stale=_is_stale(candles["open_time"].iloc[-1]),
     )
 
@@ -266,5 +268,6 @@ def generate_signal(symbol: str, candles: pd.DataFrame, predictor=None) -> Signa
         ],
         model_version=MODEL_VERSION,
         generated_at=datetime.now(timezone.utc).isoformat(),
+        data_as_of=candles["open_time"].iloc[-1].isoformat(),
         stale=_is_stale(candles["open_time"].iloc[-1]),
     )

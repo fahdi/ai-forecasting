@@ -152,3 +152,34 @@ def test_signal_endpoint_serves_db_candles_when_binance_blocked(kline_engine):
     body = response.json()
     assert body["direction"] in ("long", "flat")
     assert body["stale"] is True
+
+
+def test_signal_reports_data_as_of_from_last_candle(kline_engine):
+    """The stale badge alone says nothing about HOW stale; data_as_of must
+    carry the last candle's actual timestamp."""
+    from fastapi.testclient import TestClient
+    from unittest.mock import patch
+
+    from app.main import app
+    from app.api.v1.endpoints.models import get_health_engine
+    from app.services.kline_store import load_klines
+    from app.services.signal_service import BinanceRestCandleSource, get_predictor
+    import app.services.signal_service as signal_service
+
+    expected = load_klines(kline_engine, "BTCUSDT", INTERVAL)["open_time"].iloc[-1]
+
+    app.dependency_overrides[get_health_engine] = lambda: None
+    app.dependency_overrides[get_predictor] = lambda: None
+    try:
+        with patch.object(
+            BinanceRestCandleSource,
+            "get_recent_candles",
+            side_effect=RuntimeError("451 geo-blocked"),
+        ), patch.object(signal_service, "_resolve_kline_engine", return_value=kline_engine):
+            body = TestClient(app).get("/api/v1/signal/BTC-USDT").json()
+    finally:
+        app.dependency_overrides.pop(get_health_engine, None)
+        app.dependency_overrides.pop(get_predictor, None)
+
+    assert body["stale"] is True
+    assert body["data_as_of"] == expected.isoformat()
