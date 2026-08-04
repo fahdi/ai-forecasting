@@ -69,6 +69,56 @@ def verify_gzip_sql(path: Path) -> bool:
         return False
 
 
+PSQL_BASE = [
+    "docker", "compose", "-f", "docker-compose.prod.yml",
+    "exec", "-T", "postgres",
+    "psql", "-U", "aif_user", "-v", "ON_ERROR_STOP=1",
+]
+
+
+def _run_cmd(cmd, stdin=None):
+    result = subprocess.run(cmd, input=stdin, capture_output=True)
+    return result.returncode, result.stdout
+
+
+def verify_restore(gz_path: Path, run_cmd=_run_cmd, min_tables: int = 5) -> int:
+    """Restore the fresh dump into a scratch database and count its tables.
+
+    A backup that has never been restored is not a backup. Runs entirely in
+    the postgres container against a throwaway `restore_check` database,
+    which is dropped afterwards regardless of outcome.
+    """
+    def psql(*args, stdin=None):
+        return run_cmd(PSQL_BASE + list(args), stdin=stdin)
+
+    rc, _ = psql("-d", "postgres", "-c", "DROP DATABASE IF EXISTS restore_check")
+    if rc != 0:
+        raise RuntimeError("restore drill: could not drop stale scratch database")
+    rc, _ = psql("-d", "postgres", "-c", "CREATE DATABASE restore_check")
+    if rc != 0:
+        raise RuntimeError("restore drill: could not create scratch database")
+    try:
+        with gzip.open(gz_path, "rb") as fh:
+            sql = fh.read()
+        rc, out = psql("-q", "-d", "restore_check", stdin=sql)
+        if rc != 0:
+            raise RuntimeError(f"restore drill: restore failed: {out[:200]!r}")
+        rc, out = psql(
+            "-t", "-d", "restore_check", "-c",
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'",
+        )
+        if rc != 0:
+            raise RuntimeError("restore drill: could not count restored tables")
+        count = int(out.strip() or 0)
+        if count < min_tables:
+            raise RuntimeError(
+                f"restore drill: only {count} tables restored (expected >= {min_tables})"
+            )
+        return count
+    finally:
+        psql("-d", "postgres", "-c", "DROP DATABASE IF EXISTS restore_check")
+
+
 def run_backup(
     backup_dir: Path,
     keep_days: int,
@@ -109,9 +159,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backup-dir", required=True)
     parser.add_argument("--keep-days", type=int, default=14)
+    parser.add_argument("--skip-restore-drill", action="store_true")
     args = parser.parse_args()
     try:
-        run_backup(Path(args.backup_dir), args.keep_days, DEFAULT_DUMP_CMD)
+        target = run_backup(Path(args.backup_dir), args.keep_days, DEFAULT_DUMP_CMD)
+        if not args.skip_restore_drill:
+            tables = verify_restore(target)
+            print(f"{datetime.utcnow().isoformat()} restore drill ok: {tables} tables")
     except Exception as exc:
         print(f"{datetime.utcnow().isoformat()} BACKUP FAILED: {exc}", file=sys.stderr)
         return 1

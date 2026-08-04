@@ -111,3 +111,61 @@ def test_run_backup_fails_loudly_when_dump_command_errors(tmp_path):
             now=NOW,
         )
     assert list(tmp_path.glob(f"{PREFIX}*.sql.gz")) == []
+
+
+# ---------------------------------------------------------------------------
+# Restore drill: a backup that has never been restored is not a backup.
+# ---------------------------------------------------------------------------
+
+class FakeRunner:
+    """Records commands; returns scripted (returncode, stdout) per call."""
+
+    def __init__(self, table_count=7, fail_on_restore=False):
+        self.calls = []
+        self.table_count = table_count
+        self.fail_on_restore = fail_on_restore
+
+    def __call__(self, cmd, stdin=None):
+        joined = " ".join(cmd)
+        self.calls.append((joined, stdin is not None))
+        if "SELECT count(*)" in joined:
+            return 0, str(self.table_count).encode()
+        if stdin is not None and self.fail_on_restore:
+            return 1, b"restore exploded"
+        return 0, b""
+
+
+def _dump_file(tmp_path):
+    return _write_backup(tmp_path, "20260805-031700",
+                         b"-- PostgreSQL database dump\nCREATE TABLE t (id int);\n")
+
+
+def test_restore_drill_passes_and_cleans_up(tmp_path):
+    from scripts.prod_backup import verify_restore
+
+    runner = FakeRunner(table_count=7)
+    count = verify_restore(_dump_file(tmp_path), runner)
+    assert count == 7
+    joined = [c for c, _ in runner.calls]
+    assert any("CREATE DATABASE restore_check" in c for c in joined)
+    assert any(fed_stdin for _, fed_stdin in runner.calls)  # dump piped in
+    # scratch DB dropped both before (IF EXISTS) and after
+    assert sum("DROP DATABASE" in c for c in joined) >= 2
+
+
+def test_restore_drill_fails_on_suspicious_table_count(tmp_path):
+    from scripts.prod_backup import verify_restore
+
+    runner = FakeRunner(table_count=0)
+    with pytest.raises(RuntimeError):
+        verify_restore(_dump_file(tmp_path), runner)
+    # cleanup still happened
+    assert any("DROP DATABASE" in c for c, _ in runner.calls[-1:])
+
+
+def test_restore_drill_fails_when_restore_errors(tmp_path):
+    from scripts.prod_backup import verify_restore
+
+    runner = FakeRunner(fail_on_restore=True)
+    with pytest.raises(RuntimeError):
+        verify_restore(_dump_file(tmp_path), runner)

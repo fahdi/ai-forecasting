@@ -30,6 +30,10 @@ reverse-proxy. SSH via `iSuperCoder.com/infra/production/server-login.sh`.
 7. Backups: host cron runs `scripts/prod_backup.py` nightly (03:17 server time, root crontab) —
    compose-exec pg_dump, gzip + integrity check, 14-day retention in
    `/opt/backups/ai-forecasting/`, log at `/var/log/aif-backup.log`.
+   Every run ends with a restore drill: the fresh dump is restored into a
+   scratch `restore_check` database and its tables counted, so an
+   unrestorable backup fails the cron loudly instead of being discovered
+   during an emergency.
 
 ## 2. Binance API keys (R16) — **MANUAL**
 
