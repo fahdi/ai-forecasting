@@ -11,6 +11,7 @@ slowapi>=0.1.8
 # Data
 pandas>=2.0.0
 numpy>=1.24.0
+pyarrow>=14.0.0  # parquet engine for the DataService cache
 
 # Machine learning (boosted-tree ensemble only — PRD v1)
 scikit-learn>=1.3.0

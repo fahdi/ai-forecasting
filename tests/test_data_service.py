@@ -428,3 +428,26 @@ async def test_get_data_stats_error_returns_defaults(svc):
         "last_updated": None,
         "storage_size": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_cache_round_trip_uses_real_parquet_engine(tmp_path):
+    """Regression: prod image shipped without a parquet engine, so every
+    _cache_data call failed (swallowed as best-effort) and the data cache /
+    stats stayed empty. Round-trip a real frame with NO mocks so a missing
+    pyarrow dependency fails the suite instead of production."""
+    import pandas as pd
+    from app.services.data_service import DataService
+
+    svc = DataService()
+    svc.data_path = str(tmp_path)
+    svc._ensure_directories()
+    frame = pd.DataFrame(
+        {"Open": [1.0, 2.0], "Close": [1.5, 2.5]},
+        index=pd.to_datetime(["2026-08-01", "2026-08-02"]),
+    )
+    await svc._cache_data("TEST-RT", frame, "yahoo")
+    loaded = await svc._load_cached_data("TEST-RT", "yahoo")
+    assert loaded is not None
+    assert len(loaded) == 2
+    assert list(loaded["Close"]) == [1.5, 2.5]
