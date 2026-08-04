@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SESSION_COOKIE, verifySessionToken } from '@/lib/session';
+import {
+  createSessionToken,
+  SESSION_COOKIE,
+  SESSION_TTL_MS,
+  shouldRenewSessionToken,
+  verifySessionToken,
+} from '@/lib/session';
 
 const PUBLIC_PATHS = new Set(['/login', '/api/auth/login']);
 
@@ -20,7 +26,20 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (await verifySessionToken(token, secret)) return NextResponse.next();
+  if (await verifySessionToken(token, secret)) {
+    const response = NextResponse.next();
+    // Sliding session: refresh the cookie for active users past half-life.
+    if (await shouldRenewSessionToken(token, secret)) {
+      response.cookies.set(SESSION_COOKIE, await createSessionToken(secret), {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: SESSION_TTL_MS / 1000,
+      });
+    }
+    return response;
+  }
 
   if (pathname.startsWith('/api/')) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });

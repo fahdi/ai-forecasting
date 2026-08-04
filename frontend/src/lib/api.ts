@@ -114,6 +114,11 @@ class ApiService {
       ...options,
     });
 
+    if (response.status === 401 && typeof window !== "undefined") {
+      // Session expired: land on the login page instead of dead panels.
+      window.location.href = "/login";
+      throw new Error("Session expired");
+    }
     if (!response.ok) {
       let detail = response.statusText;
       try {

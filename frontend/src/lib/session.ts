@@ -32,6 +32,21 @@ export async function createSessionToken(secret: string, now = Date.now()): Prom
   return `${expires}.${await hmac(expires, secret)}`;
 }
 
+/**
+ * Sliding sessions: once more than half the TTL has elapsed, the middleware
+ * issues a fresh cookie so active users never get logged out mid-use.
+ * Invalid or expired tokens are never renewed.
+ */
+export async function shouldRenewSessionToken(
+  token: string | undefined,
+  secret: string,
+  now = Date.now(),
+): Promise<boolean> {
+  if (!(await verifySessionToken(token, secret, now))) return false;
+  const expires = Number(token!.split('.')[0]);
+  return expires - now < SESSION_TTL_MS / 2;
+}
+
 export async function verifySessionToken(
   token: string | undefined,
   secret: string,
