@@ -1,0 +1,11 @@
+# Freqtrade strategy tests (tests/test_ensemble_strategy.py) only.
+#
+# freqtrade pins pandas/numpy differently from the app, which is why it lives
+# in its own venv locally (.venv-freqtrade) and its own CI job rather than
+# joining requirements-dev.txt.
+#
+# TA-Lib is deliberately absent: the strategy does not use it and
+# `freqtrade.strategy` imports without it, so CI needs no system packages.
+
+freqtrade==2026.6
+pytest>=7.4.0

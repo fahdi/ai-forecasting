@@ -36,6 +36,34 @@ jobs:
       - name: Run tests
         run: pytest tests -q
 
+  # tests/test_ensemble_strategy.py importorskips freqtrade, so in the backend
+  # job all 26 of its tests skip silently - including the R9 rule that stops
+  # the bot entering on stale data. That rule is the reason no trades were
+  # placed on the 120-hour-old klines, and nothing was guarding it.
+  strategy:
+    name: Strategy (freqtrade)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # 3.12 matches the local .venv-freqtrade these tests are developed in.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-strategy.txt
+
+      - name: Install freqtrade
+        run: pip install -r requirements-strategy.txt
+
+      # importorskip means a broken install would skip all 26 tests and still
+      # exit 0, recreating the hole this job exists to close. Fail here first.
+      - name: Verify freqtrade imports
+        run: python -c "from freqtrade.strategy import IStrategy; print('ok')"
+
+      - name: Run strategy tests
+        run: pytest tests/test_ensemble_strategy.py -q -W ignore::DeprecationWarning
+
   frontend:
     name: Frontend (typecheck + vitest + build)
     runs-on: ubuntu-latest
