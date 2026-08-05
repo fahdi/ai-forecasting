@@ -66,29 +66,32 @@ output referenced from the design docs.
 
 Open slices: #22-#26 (R5 S2-S6), #28-#33 (R13 S2-S7).
 
-### Every requirement is now in the cycle
+### Every requirement is now designed
 
-R5 and R13 are through design and into delivery. Every other requirement that
-is not already implemented has a tracking issue carrying its audit evidence,
-its gap, and the same definition of done, so nothing is waiting to be
-remembered:
+All 17 audited. R2, R3, R6 and R15 are implemented and covered in CI, so they
+need nothing. The other 13 have been through a design council, have a design
+doc in `docs/design/`, and have slice issues with acceptance criteria.
 
-| Requirement | Issue | Next step |
-|---|---|---|
-| R1 daily-bar model | #34 | design council |
-| R4 backfill automation and gap repair | #35 | **designed**, slices #48-#51, S1 shipped |
-| R7 freqtrade execution | #36 | design council |
-| R8 strategy guards | #37 | design council |
-| R9 fail-closed behaviour | #38 | design council |
-| R10 exchange-side stops | #39 | design council |
-| R11 dashboard | #40 | design council |
-| R12 Telegram | #41 | design council |
-| R14 alerting | #42 | blocked: needs a channel chosen |
-| R16 API key restrictions | #43 | blocked: needs live keys |
-| R17 backup coverage | #44 | **designed**, slices #45-#47 |
+| Requirement | Design doc | Slices | Shipped |
+|---|---|---|---|
+| R1 daily-bar model | `R1-*.md` | 4 | |
+| R4 kline gap repair | `R4-kline-gap-repair.md` | 4 | S1 (v1.3.0) |
+| R5 scheduled retraining | `R5-scheduled-retraining.md` | 6 | S1 (v1.1.0) |
+| R7 freqtrade execution | `R7-*.md` | 4 | |
+| R8 strategy guards | `R8-*.md` | 3 | |
+| R9 fail-closed behaviour | `R9-*.md` | 3 | |
+| R10 exchange-side stops | `R10-*.md` | 3 | |
+| R11 dashboard | `R11-*.md` | 4 | |
+| R12 Telegram | `R12-*.md` | 3 | |
+| R13 decision audit log | `R13-decision-audit-log.md` | 7 | S1 (v1.2.0) |
+| R14 alerting | `R14-*.md` | 3 | |
+| R16 API key restrictions | `R16-*.md` | 3 | |
+| R17 backup coverage | `R17-backup-coverage.md` | 3 | |
 
-R2, R3, R6 and R15 are implemented and covered by tests that run in CI; they
-need no issue.
+50 slice issues total, 3 shipped. Every remaining slice is designed to be
+testable and valuable WITHOUT live Binance access, so the geo-block does not
+block delivery.
+
 
 **Suggested order.** R4 first: the ingestor outage left a permanent hole in the
 klines table that nothing repairs, and every model slice downstream trains on
