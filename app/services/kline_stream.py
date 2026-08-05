@@ -8,6 +8,7 @@ with backoff — a dropped connection never crashes the service.
 
 import asyncio
 import json
+import re
 from typing import Callable, Dict, List, Optional
 
 import pandas as pd
@@ -20,6 +21,41 @@ from app.services.kline_store import INTERVAL_MS, upsert_klines
 logger = get_logger()
 
 BINANCE_WS_BASE = "wss://stream.binance.com:9443/stream"
+
+# Rejections that will not succeed on retry: the exchange is refusing this
+# client, not failing. 451 is the one that bit us (restricted location);
+# 401/403 mean the same thing for credentials. 408 and 429 are explicitly not
+# here - a timeout or a rate limit does recover, and retrying is correct.
+PERMANENT_REJECTION_STATUSES = frozenset({401, 403, 451})
+
+_HTTP_STATUS_IN_MESSAGE = re.compile(r"HTTP (\d{3})")
+
+
+class PermanentStreamRejection(RuntimeError):
+    """The exchange refused the connection in a way retrying cannot fix."""
+
+
+def _status_of(exc: BaseException) -> Optional[int]:
+    """HTTP status behind a websocket rejection, if there is one.
+
+    Different `websockets` versions expose it as status_code, status, or only
+    in the message text, so fall back to parsing rather than depending on one.
+    """
+    for attribute in ("status_code", "status"):
+        value = getattr(exc, attribute, None)
+        if isinstance(value, int):
+            return value
+        code = getattr(value, "value", None)  # HTTPStatus enum
+        if isinstance(code, int):
+            return code
+
+    match = _HTTP_STATUS_IN_MESSAGE.search(str(exc))
+    return int(match.group(1)) if match else None
+
+
+def is_permanent_rejection(exc: BaseException) -> bool:
+    """True when reconnecting is futile and the process should stop."""
+    return _status_of(exc) in PERMANENT_REJECTION_STATUSES
 
 
 def binance_connect_factory(pairs: List[str], interval: str) -> Callable:
@@ -115,6 +151,17 @@ class KlineStreamConsumer:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                # Spinning on a rejection that can never succeed is how three
+                # days of missing market data looked exactly like reconnect
+                # churn. Stop, so the process exits nonzero and the container
+                # restart count says something.
+                if is_permanent_rejection(exc):
+                    logger.error(
+                        "Kline stream permanently rejected; not retrying",
+                        error=str(exc),
+                        status=_status_of(exc),
+                    )
+                    raise PermanentStreamRejection(str(exc)) from exc
                 logger.warning("Kline stream dropped; will reconnect",
                                error=str(exc))
             if max_connections is not None and connections >= max_connections:

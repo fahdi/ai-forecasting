@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sqlalchemy import create_engine
 
 from app.services.kline_store import create_tables
-from app.services.kline_stream import KlineStreamConsumer
+from app.services.kline_stream import KlineStreamConsumer, PermanentStreamRejection
 from app.services.signal_service import UNIVERSE
 
 
@@ -43,7 +43,19 @@ def main() -> int:
     consumer = KlineStreamConsumer(
         engine, list(UNIVERSE), args.interval, heartbeat_fn=heartbeat_fn
     )
-    asyncio.run(consumer.run())
+    try:
+        asyncio.run(consumer.run())
+    except PermanentStreamRejection as exc:
+        # Distinct exit code, and a sentence instead of a traceback: this is
+        # the message someone reads at 3am wondering why data stopped.
+        print(f"kline stream permanently rejected: {exc}", file=sys.stderr)
+        print(
+            "restarting will not help - the exchange is refusing this host "
+            "(e.g. HTTP 451 restricted location). Move the ingestor to a "
+            "permitted region.",
+            file=sys.stderr,
+        )
+        return 2
     return 0
 
 
