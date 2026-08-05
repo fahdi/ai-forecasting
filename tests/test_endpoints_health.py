@@ -7,6 +7,7 @@ Postgres/Redis is required.
 """
 
 import sys
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,6 +25,12 @@ def make_db_session(healthy: bool = True) -> MagicMock:
     if healthy:
         result = MagicMock()
         result.fetchone = AsyncMock(return_value=(1,))
+        # scalar() serves the market-data freshness query. A healthy stack has
+        # a recent kline; without this the mock's implicit float would date to
+        # 1970 and read as a stalled feed.
+        result.scalar = MagicMock(
+            return_value=int(datetime.now(timezone.utc).timestamp() * 1000)
+        )
         session.execute = AsyncMock(return_value=result)
     else:
         session.execute = AsyncMock(side_effect=RuntimeError("db down"))
@@ -98,7 +105,7 @@ class TestDetailedHealth:
         body = response.json()
         assert body["status"] == "healthy"
         components = body["components"]
-        for name in ("database", "redis", "storage", "model_storage", "ml_libraries"):
+        for name in ("database", "redis", "storage", "model_storage", "ml_libraries", "market_data"):
             assert components[name]["status"] == "healthy", name
         # ML library versions are reported when all imports succeed
         versions = components["ml_libraries"]["versions"]

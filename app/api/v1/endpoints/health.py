@@ -162,7 +162,36 @@ async def detailed_health_check(
             "status": "unhealthy",
             "message": f"Backup status check failed: {str(e)}"
         }
-    
+
+    # Market data freshness. Every other component answers "can we reach our
+    # dependencies"; this one answers "is data still arriving", which is what
+    # actually stopped during the 2026-08-03 Binance 451 outage while this
+    # endpoint kept reporting healthy. Only staleness degrades: an empty table
+    # is a fresh install, and an undeterminable answer is reported as unknown
+    # rather than dressed up as healthy.
+    try:
+        import os
+
+        from sqlalchemy import text as _text
+
+        from app.services.market_data_status import market_data_status
+
+        interval = os.environ.get("MARKET_DATA_INTERVAL", "4h")
+        result = await db.execute(
+            _text('SELECT MAX(open_time_ms) FROM klines WHERE "interval" = :interval'),
+            {"interval": interval},
+        )
+        newest = result.scalar()
+        market_data = market_data_status(newest, interval=interval)
+        health_status["components"]["market_data"] = market_data
+        if market_data["status"] == "stale":
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["components"]["market_data"] = {
+            "status": "unknown",
+            "message": f"Market data freshness could not be determined: {str(e)}"
+        }
+
     return health_status
 
 @router.get("/ready")
