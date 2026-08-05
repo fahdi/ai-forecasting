@@ -17,6 +17,14 @@ STAMP_FORMAT = "%Y%m%d-%H%M%S"
 # Nightly cadence plus generous slack: anything older means a broken pipeline.
 MAX_AGE_HOURS = 26
 
+# Which of this module's statuses are faults. Owned here rather than restated
+# as a literal in health.py: the consumer used to hardcode ("stale",
+# "missing") separately, so renaming a status here would have left backups
+# rotting while /health/detailed still reported healthy.
+DEGRADED_STATUSES = frozenset({"stale", "missing"})
+# Absent by configuration, not broken - local dev has no backup directory.
+BENIGN_STATUSES = frozenset({"healthy", "not_configured"})
+
 
 def backup_status(
     directory: Optional[str],
