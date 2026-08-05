@@ -61,8 +61,13 @@ jobs:
       - name: Verify freqtrade imports
         run: python -c "from freqtrade.strategy import IStrategy; print('ok')"
 
+      # test_decision_evaluation.py runs in BOTH jobs on purpose: the module is
+      # pure and importable from either venv, and the guard vocabulary has to
+      # hold under the Python and pandas versions freqtrade actually pins.
       - name: Run strategy tests
-        run: pytest tests/test_ensemble_strategy.py -q -W ignore::DeprecationWarning
+        run: |
+          pytest tests/test_ensemble_strategy.py tests/test_decision_evaluation.py \
+            -q -W ignore::DeprecationWarning
 
   frontend:
     name: Frontend (typecheck + vitest + build)

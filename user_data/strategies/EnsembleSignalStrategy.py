@@ -37,6 +37,7 @@ from freqtrade.strategy import DecimalParameter, IStrategy
 # both under freqtrade and under plain pytest.
 sys.path.append(str(Path(__file__).parent))
 
+from decision import evaluate_entry  # noqa: E402
 from signal_client import SignalClient  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -147,35 +148,28 @@ class EnsembleSignalStrategy(IStrategy):
         return dataframe
 
     def _entry_allowed(self, dataframe: pd.DataFrame, pair: str) -> bool:
+        """Delegates every guard to decision.evaluate_entry (R13).
+
+        The guard logic lives in a pure module so the reason a trade did not
+        happen is structured data rather than a discarded log line. Behaviour
+        is unchanged: evaluate_entry reports the first failing guard in the
+        original order.
+        """
         last = dataframe.iloc[-1]
         signal = self.signal_client.get_signal(pair, last["date"])
-        if signal is None:
-            logger.info("%s: no signal (API unavailable) — no entry (R9)", pair)
-            return False
-        if signal.get("stale", True):
-            logger.info("%s: signal stale — no entry (R9)", pair)
-            return False
-        if signal.get("direction") != "long":
-            return False
-        confidence = signal.get("confidence")
-        if not isinstance(confidence, (int, float)) or (
-            confidence < self.buy_confidence_threshold.value
-        ):
-            logger.info("%s: confidence %s below threshold — no entry", pair, confidence)
-            return False
-        ema50 = last["ema50"]
-        if pd.isna(ema50) or not last["close"] > ema50:
-            logger.info("%s: close below EMA50 — trend guard blocked entry", pair)
-            return False
-        volatility = last["volatility_ann"]
-        if pd.isna(volatility) or not volatility < self.volatility_ceiling.value:
-            logger.info(
-                "%s: annualized volatility %.2f above ceiling — no entry",
-                pair,
-                float("nan") if pd.isna(volatility) else volatility,
-            )
-            return False
-        return True
+        result = evaluate_entry(
+            signal=signal,
+            close=last["close"],
+            ema50=last["ema50"],
+            volatility_ann=last["volatility_ann"],
+            confidence_threshold=self.buy_confidence_threshold.value,
+            volatility_ceiling=self.volatility_ceiling.value,
+        )
+        if result.decision != "entered":
+            # Machine-readable reason code, so the log is greppable before any
+            # database exists.
+            logger.info("%s: no entry (reason=%s)", pair, result.reason)
+        return result.decision == "entered"
 
     # --- Exit ---
 

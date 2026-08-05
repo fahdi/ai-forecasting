@@ -19,22 +19,25 @@ import pytest
 
 from app.services.signal_service import Signal
 
-STRATEGY_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "user_data"
-    / "strategies"
-    / "EnsembleSignalStrategy.py"
+STRATEGY_DIR = Path(__file__).resolve().parents[1] / "user_data" / "strategies"
+# The guard chain moved into decision.py (issue #27), so the signal field reads
+# live in both files now. Parse both, or the contract silently stops covering
+# the code that actually reads the payload.
+STRATEGY_PATHS = (
+    STRATEGY_DIR / "EnsembleSignalStrategy.py",
+    STRATEGY_DIR / "decision.py",
 )
 
 
-def _strategy_ast() -> ast.Module:
-    return ast.parse(STRATEGY_PATH.read_text())
+def _strategy_asts():
+    return [ast.parse(path.read_text()) for path in STRATEGY_PATHS]
 
 
 def _signal_key_accesses() -> list[ast.AST]:
     """Every `signal.get("x")` and `signal["x"]` node in the strategy."""
     nodes = []
-    for node in ast.walk(_strategy_ast()):
+    for tree in _strategy_asts():
+      for node in ast.walk(tree):
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
@@ -108,12 +111,33 @@ def test_stale_defaults_to_true_so_a_missing_field_blocks_entry():
 def test_directions_the_strategy_branches_on_are_ones_the_api_can_emit(direction):
     """Spot-only: the API never emits "short", and the strategy never asks."""
     compared = set()
-    for node in ast.walk(_strategy_ast()):
-        if isinstance(node, ast.Compare) and isinstance(node.left, (ast.Call, ast.Subscript)):
-            try:
-                if _key_of(node.left) != "direction":
+    for tree in _strategy_asts():
+        # Follow `direction = signal.get("direction")` as well as a direct
+        # comparison: extracting the field into a local is ordinary
+        # refactoring and must not blind this check.
+        aliases = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and isinstance(node.value, (ast.Call, ast.Subscript)):
+                try:
+                    if _key_of(node.value) != "direction":
+                        continue
+                except (AttributeError, IndexError):
                     continue
-            except (AttributeError, IndexError):
+                aliases.update(t.id for t in node.targets if isinstance(t, ast.Name))
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Compare):
+                continue
+            left = node.left
+            reads_direction = False
+            if isinstance(left, ast.Name) and left.id in aliases:
+                reads_direction = True
+            elif isinstance(left, (ast.Call, ast.Subscript)):
+                try:
+                    reads_direction = _key_of(left) == "direction"
+                except (AttributeError, IndexError):
+                    reads_direction = False
+            if not reads_direction:
                 continue
             for comparator in node.comparators:
                 if isinstance(comparator, ast.Constant) and isinstance(comparator.value, str):
