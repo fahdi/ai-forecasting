@@ -13,3 +13,4 @@ models/registry/
 data/
 .coverage
 catboost_info/
+node_modules/
