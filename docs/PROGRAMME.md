@@ -62,6 +62,7 @@ output referenced from the design docs.
 | v1.0.1 | Design docs for R5 and R13 | - |
 | v1.1.0 | R5 S1: a promotion gate that is actually a comparison | #21 |
 | v1.2.0 | R13 S1: guard evaluation returns structured data | #27 |
+| v1.3.0 | R4 S1: kline coverage becomes a health component | #48 |
 
 Open slices: #22-#26 (R5 S2-S6), #28-#33 (R13 S2-S7).
 
@@ -75,7 +76,7 @@ remembered:
 | Requirement | Issue | Next step |
 |---|---|---|
 | R1 daily-bar model | #34 | design council |
-| R4 backfill automation and gap repair | #35 | design council |
+| R4 backfill automation and gap repair | #35 | **designed**, slices #48-#51, S1 shipped |
 | R7 freqtrade execution | #36 | design council |
 | R8 strategy guards | #37 | design council |
 | R9 fail-closed behaviour | #38 | design council |
@@ -84,7 +85,7 @@ remembered:
 | R12 Telegram | #41 | design council |
 | R14 alerting | #42 | blocked: needs a channel chosen |
 | R16 API key restrictions | #43 | blocked: needs live keys |
-| R17 backup coverage | #44 | design council |
+| R17 backup coverage | #44 | **designed**, slices #45-#47 |
 
 R2, R3, R6 and R15 are implemented and covered by tests that run in CI; they
 need no issue.
@@ -94,6 +95,13 @@ klines table that nothing repairs, and every model slice downstream trains on
 that data. Then R17 and R14 together, since a backup you are not told about
 failing is the same as no backup. R11 and R12 last, as they are reporting
 surfaces over work that has to exist first.
+
+### Councils are cheap now
+
+The first council (R5 + R13) cost ~917k subagent tokens. The second (R4 + R17)
+cost ~325k for the same two-requirement output, by telling agents to read only
+the named files, using two designs instead of three, and running the design
+agents at low effort. Use the second shape.
 
 ### Next up: #22, R5 S2
 
