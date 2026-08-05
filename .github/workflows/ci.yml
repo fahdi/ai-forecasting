@@ -37,7 +37,7 @@ jobs:
         run: pytest tests -q
 
   frontend:
-    name: Frontend (typecheck + vitest)
+    name: Frontend (typecheck + vitest + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -60,3 +60,11 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      # tsc and vitest both pass on a page that throws during prerender, and
+      # nothing else covers page components. Without this the failure would
+      # first appear as a broken `docker compose build` on the VPS.
+      # Runs without frontend/.env.local: every env read has a fallback or is
+      # request-time only.
+      - name: Build
+        run: npm run build
