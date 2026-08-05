@@ -9,3 +9,9 @@
 
 freqtrade==2026.6
 pytest>=7.4.0
+
+# freqtrade.data.metrics does `from scipy import stats` but freqtrade does not
+# declare scipy, so `from freqtrade.strategy import IStrategy` fails on a
+# clean install. It is present in .venv-freqtrade only by accident of what
+# else was installed there.
+scipy>=1.11
