@@ -65,6 +65,36 @@ output referenced from the design docs.
 
 Open slices: #22-#26 (R5 S2-S6), #28-#33 (R13 S2-S7).
 
+### Every requirement is now in the cycle
+
+R5 and R13 are through design and into delivery. Every other requirement that
+is not already implemented has a tracking issue carrying its audit evidence,
+its gap, and the same definition of done, so nothing is waiting to be
+remembered:
+
+| Requirement | Issue | Next step |
+|---|---|---|
+| R1 daily-bar model | #34 | design council |
+| R4 backfill automation and gap repair | #35 | design council |
+| R7 freqtrade execution | #36 | design council |
+| R8 strategy guards | #37 | design council |
+| R9 fail-closed behaviour | #38 | design council |
+| R10 exchange-side stops | #39 | design council |
+| R11 dashboard | #40 | design council |
+| R12 Telegram | #41 | design council |
+| R14 alerting | #42 | blocked: needs a channel chosen |
+| R16 API key restrictions | #43 | blocked: needs live keys |
+| R17 backup coverage | #44 | design council |
+
+R2, R3, R6 and R15 are implemented and covered by tests that run in CI; they
+need no issue.
+
+**Suggested order.** R4 first: the ingestor outage left a permanent hole in the
+klines table that nothing repairs, and every model slice downstream trains on
+that data. Then R17 and R14 together, since a backup you are not told about
+failing is the same as no backup. R11 and R12 last, as they are reporting
+surfaces over work that has to exist first.
+
 ### Next up: #22, R5 S2
 
 `scripts/retrain.py`: one correct, auditable, unattended-safe retrain. Partial
