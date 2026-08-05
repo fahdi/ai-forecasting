@@ -57,7 +57,7 @@ def create_application() -> FastAPI:
     app = FastAPI(
         title="AI-Based Stock Forecasting API",
         description="Comprehensive AI-powered stock forecasting system with multi-model predictions",
-        version="1.0.0",
+        version=settings.VERSION,
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
@@ -129,7 +129,7 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "version": "1.0.0",
+        "version": settings.VERSION,
         "service": "ai-forecasting-api"
     }
 
@@ -143,7 +143,7 @@ async def root():
     """Root endpoint with API information"""
     return {
         "message": "AI-Based Stock Forecasting API",
-        "version": "1.0.0",
+        "version": settings.VERSION,
         "docs": "/docs",
         "health": "/health",
         "metrics": "/metrics"

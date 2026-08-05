@@ -3,9 +3,24 @@ Configuration settings for the AI Forecasting API
 """
 
 import os
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 from pydantic import Field, validator
 from pydantic_settings import BaseSettings
+
+# The repo-root VERSION file is the single source of truth, written only by
+# scripts/release.py. It is COPYed into the image (see Dockerfile); the
+# fallback keeps the app importable in odd contexts rather than crashing on a
+# missing file, and the release tests assert the real value stays in step.
+_VERSION_FALLBACK = "0.0.0"
+
+
+def _read_version_file() -> str:
+    try:
+        return (Path(__file__).resolve().parents[2] / "VERSION").read_text().strip()
+    except OSError:
+        return _VERSION_FALLBACK
+
 
 class Settings(BaseSettings):
     """Application settings"""
@@ -13,7 +28,7 @@ class Settings(BaseSettings):
     # API Settings
     API_V1_STR: str = "/api/v1"
     PROJECT_NAME: str = "AI-Based Stock Forecasting API"
-    VERSION: str = "1.0.0"
+    VERSION: str = _read_version_file()
     DESCRIPTION: str = "Comprehensive AI-powered stock forecasting system"
     
     # Server Settings

@@ -24,7 +24,7 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "1.0.0",
+        "version": settings.VERSION,
         "service": "ai-forecasting-api"
     }
 
@@ -38,7 +38,7 @@ async def detailed_health_check(
     health_status = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "1.0.0",
+        "version": settings.VERSION,
         "service": "ai-forecasting-api",
         "components": {}
     }
