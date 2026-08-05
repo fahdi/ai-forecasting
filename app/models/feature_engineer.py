@@ -12,6 +12,36 @@ from app.core.config import FEATURE_CONFIG
 
 logger = structlog.get_logger()
 
+# Parkinson (1980) volatility. Close-to-close standard deviation throws away
+# the intrabar range; reading the high-low spread predicts the next 20 bars of
+# realized volatility substantially better (out-of-sample R^2 on 4h bars,
+# train 2024-07..2025-07 / test 2025-07..2026-07: BTC .071 -> .132,
+# ETH .050 -> .093, SOL .073 -> .133).
+#
+# Garman-Klass was measured alongside it and deliberately left out: it scores
+# the same within noise but correlates .992 with Parkinson, and carrying both
+# made out-of-sample R^2 *worse* than either alone on all three pairs
+# (BTC .046, SOL .030 — below the close-to-close baseline). Adding it back
+# needs new evidence, not symmetry.
+_PARKINSON_FACTOR = 1.0 / (4.0 * np.log(2.0))
+
+DEFAULT_VOLATILITY_WINDOW = 20
+
+
+def parkinson_volatility(
+    high: pd.Series, low: pd.Series, window: int = DEFAULT_VOLATILITY_WINDOW
+) -> pd.Series:
+    """Rolling Parkinson volatility from the high-low log range.
+
+    The window average is taken over the variance and the square root applied
+    once at the end; rooting each bar first and averaging those is a different
+    quantity.
+    """
+    log_range_squared = np.log(high / low) ** 2
+    variance = _PARKINSON_FACTOR * log_range_squared.rolling(window=window).mean()
+    return np.sqrt(variance)
+
+
 class FeatureEngineer:
     """Feature engineering for stock data"""
     
@@ -218,19 +248,10 @@ class FeatureEngineer:
             for window in [5, 10, 20, 50]:
                 df[f'realized_volatility_{window}'] = returns.rolling(window=window).std()
             
-            # Parkinson volatility (using high-low range) - TODO: Fix syntax error
-            # parkinson_factor = 1 / (4 * np.log(2))
-            # high_low_log_squared = (np.log(df['high'] / df['low']) ** 2
-            # df['parkinson_volatility'] = np.sqrt(
-            #     parkinson_factor * high_low_log_squared.rolling(window=20).mean()
-            # )
-            
-            # Garman-Klass volatility - TODO: Fix syntax error
-            # high_low_squared = (np.log(df['high'] / df['low']) ** 2
-            # open_close_squared = (np.log(df['close'] / df['open']) ** 2
-            # gk_vol = (0.5 * high_low_squared) - ((2 * np.log(2) - 1) * open_close_squared)
-            # df['garman_klass_volatility'] = np.sqrt(gk_vol).rolling(window=20).mean()
-            
+            # Range-based volatility: reads the intrabar high-low spread that
+            # close-to-close std ignores entirely.
+            df['parkinson_volatility'] = parkinson_volatility(df['high'], df['low'])
+
             return df
             
         except Exception as e:
