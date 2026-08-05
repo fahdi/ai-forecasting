@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 VERSION_FILE_REL = "VERSION"
 PACKAGE_JSON_REL = "frontend/package.json"
+LOCKFILE_REL = "frontend/package-lock.json"
 
 _SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 BUMP_PARTS = ("major", "minor", "patch")
@@ -79,6 +80,19 @@ def write_version(root: Path, version: str) -> List[Path]:
     # Preserve key order and npm's two-space formatting so the diff is one line.
     package_path.write_text(json.dumps(package, indent=2) + "\n")
     changed.append(package_path)
+
+    # The lockfile carries the version twice, and npm rejects a mismatch with
+    # package.json. v1.0.1 shipped with them out of step because this was
+    # missed. Dependency pins under packages/* are left alone.
+    lock_path = root / LOCKFILE_REL
+    if lock_path.exists():
+        lock = json.loads(lock_path.read_text())
+        lock["version"] = version
+        root_package = (lock.get("packages") or {}).get("")
+        if isinstance(root_package, dict):
+            root_package["version"] = version
+        lock_path.write_text(json.dumps(lock, indent=2) + "\n")
+        changed.append(lock_path)
 
     return changed
 
@@ -161,7 +175,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"  updated {path.relative_to(root)}")
 
     headline = args.message or f"Release {tag}"
-    _git("add", VERSION_FILE_REL, PACKAGE_JSON_REL, root=root)
+    _git("add", VERSION_FILE_REL, PACKAGE_JSON_REL, LOCKFILE_REL, root=root)
     _git("commit", "-m", f"Release {tag}: {headline}" if args.message else f"Release {tag}", root=root)
     _git("tag", "-a", tag, "-m", headline, root=root)
     _git("push", "origin", "main", root=root)

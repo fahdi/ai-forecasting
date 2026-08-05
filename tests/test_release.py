@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from scripts.release import (
+    LOCKFILE_REL,
     PACKAGE_JSON_REL,
     VERSION_FILE_REL,
     bump_version,
@@ -80,20 +81,69 @@ class TestVersionSourceOfTruth:
             source = (REPO_ROOT / rel).read_text()
             assert '"1.0.0"' not in source, f"{rel} still hardcodes a version"
 
-    def test_write_version_updates_both_files(self, tmp_path):
+    def _frontend(self, tmp_path):
         (tmp_path / VERSION_FILE_REL).write_text("1.0.0\n")
-        frontend = tmp_path / "frontend"
-        frontend.mkdir()
+        (tmp_path / "frontend").mkdir()
         (tmp_path / PACKAGE_JSON_REL).write_text(
             json.dumps({"name": "frontend", "version": "1.0.0", "scripts": {}}, indent=2)
             + "\n"
         )
+        (tmp_path / LOCKFILE_REL).write_text(
+            json.dumps(
+                {
+                    "name": "frontend",
+                    "version": "1.0.0",
+                    "lockfileVersion": 3,
+                    "packages": {
+                        "": {"name": "frontend", "version": "1.0.0"},
+                        "node_modules/next": {"version": "15.4.5"},
+                    },
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+
+    def test_write_version_updates_all_three_files(self, tmp_path):
+        self._frontend(tmp_path)
 
         changed = write_version(tmp_path, "1.1.0")
 
         assert read_version(tmp_path) == "1.1.0"
         assert json.loads((tmp_path / PACKAGE_JSON_REL).read_text())["version"] == "1.1.0"
+        assert len(changed) == 3
+
+    def test_lockfile_version_is_kept_in_step(self, tmp_path):
+        """npm errors on a package.json/lockfile version mismatch, and the
+        drift compounds silently every release until it does."""
+        self._frontend(tmp_path)
+
+        write_version(tmp_path, "1.1.0")
+
+        lock = json.loads((tmp_path / LOCKFILE_REL).read_text())
+        assert lock["version"] == "1.1.0"
+        assert lock["packages"][""]["version"] == "1.1.0"
+        # Dependency pins must be untouched.
+        assert lock["packages"]["node_modules/next"]["version"] == "15.4.5"
+
+    def test_missing_lockfile_is_not_fatal(self, tmp_path):
+        (tmp_path / VERSION_FILE_REL).write_text("1.0.0\n")
+        (tmp_path / "frontend").mkdir()
+        (tmp_path / PACKAGE_JSON_REL).write_text(
+            json.dumps({"name": "frontend", "version": "1.0.0"}, indent=2) + "\n"
+        )
+
+        changed = write_version(tmp_path, "1.1.0")
+
         assert len(changed) == 2
+
+    def test_repo_lockfile_agrees_with_package_json(self):
+        """The real files, not a fixture: this is the drift that actually
+        happened when v1.0.1 shipped."""
+        canonical = read_version(REPO_ROOT)
+        lock = json.loads((REPO_ROOT / LOCKFILE_REL).read_text())
+        assert lock["version"] == canonical
+        assert lock["packages"][""]["version"] == canonical
 
     def test_write_version_preserves_other_package_json_keys(self, tmp_path):
         (tmp_path / VERSION_FILE_REL).write_text("1.0.0\n")
