@@ -12,10 +12,12 @@ import {
   Brain,
   Clock,
   CheckCircle,
-  XCircle
+  XCircle,
+  AlertTriangle
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
-import { apiService, RecentForecastJob } from "@/lib/api";
+import { apiService, DetailedHealth, RecentForecastJob } from "@/lib/api";
+import { systemStatusView } from "@/lib/system-status";
 import { toast } from "sonner";
 
 interface DayPoint {
@@ -31,7 +33,8 @@ interface DashboardState {
   dataPoints: number;
   totalSymbols: number;
   accuracy: number | null;
-  apiStatus: "healthy" | "unhealthy" | "checking";
+  health: DetailedHealth | null;
+  healthFailed: boolean;
   loaded: boolean;
 }
 
@@ -65,14 +68,15 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
     dataPoints: 0,
     totalSymbols: 0,
     accuracy: null,
-    apiStatus: "checking",
+    health: null,
+    healthFailed: false,
     loaded: false,
   });
 
   useEffect(() => {
     const load = async () => {
       const [health, dataStats, models, performances, recent] = await Promise.allSettled([
-        apiService.getHealth(),
+        apiService.getDetailedHealth(),
         apiService.getDataStats(),
         apiService.getModels(),
         apiService.getModelPerformance(),
@@ -91,7 +95,8 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
           : [];
 
       setState({
-        apiStatus: health.status === "fulfilled" ? "healthy" : "unhealthy",
+        health: health.status === "fulfilled" ? health.value : null,
+        healthFailed: health.status === "rejected",
         dataPoints: dataStats.status === "fulfilled" ? dataStats.value.total_data_points : 0,
         totalSymbols: dataStats.status === "fulfilled" ? dataStats.value.total_symbols : 0,
         activeModels: models.status === "fulfilled" ? models.value.length : 0,
@@ -111,6 +116,7 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
   }, []);
 
   const series = buildDailySeries(state.recentJobs);
+  const system = systemStatusView(state.health, state.healthFailed);
 
   return (
     <div className="space-y-6">
@@ -122,15 +128,20 @@ export function Dashboard({ onNavigate }: { onNavigate?: (tab: string) => void }
         </div>
         <div className="flex items-center space-x-2">
           <div className="flex items-center space-x-2">
-            {state.apiStatus === "healthy" ? (
+            {system.status === "healthy" ? (
               <CheckCircle className="h-4 w-4 text-green-500" />
-            ) : state.apiStatus === "unhealthy" ? (
+            ) : system.status === "degraded" ? (
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+            ) : system.status === "unhealthy" ? (
               <XCircle className="h-4 w-4 text-red-500" />
             ) : (
               <Clock className="h-4 w-4 text-yellow-500" />
             )}
-            <span className="text-sm">
-              API: {state.apiStatus === "healthy" ? "Connected" : state.apiStatus === "unhealthy" ? "Disconnected" : "Checking..."}
+            <span className="text-sm" title={system.detail ?? undefined}>
+              API: {system.label}
+              {system.detail ? (
+                <span className="ml-1 text-muted-foreground">({system.detail})</span>
+              ) : null}
             </span>
           </div>
           <Button onClick={() => onNavigate?.("forecasts")}>
