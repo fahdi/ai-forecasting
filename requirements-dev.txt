@@ -4,6 +4,9 @@
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
+# Async driver for the throwaway sqlite DB that conftest points DATABASE_URL
+# at. Production uses postgres/asyncpg, so this is test-only.
+aiosqlite>=0.19.0
 
 black>=23.0.0
 isort>=5.12.0
