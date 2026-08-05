@@ -157,9 +157,16 @@ class Signal:
     stale: bool
 
 
-def _is_stale(last_open_time: pd.Timestamp) -> bool:
+def _is_stale(
+    last_open_time: pd.Timestamp, now: Optional[pd.Timestamp] = None
+) -> bool:
+    """Whether the newest candle is too old to open a position against (R9).
+
+    `now` is injectable so the boundary can be tested deterministically; the
+    production call sites omit it.
+    """
     last_close = last_open_time + INTERVAL_DELTA
-    return (pd.Timestamp.now(tz="UTC") - last_close) > STALE_AFTER
+    return ((now or pd.Timestamp.now(tz="UTC")) - last_close) > STALE_AFTER
 
 
 def _ensemble_signal(symbol: str, candles: pd.DataFrame, predictor) -> Signal:
