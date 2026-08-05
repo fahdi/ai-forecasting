@@ -195,6 +195,56 @@ async def detailed_health_check(
             "message": f"Market data freshness could not be determined: {str(e)}"
         }
 
+    # Kline coverage over a window. market_data above answers "is data still
+    # arriving"; this answers "is the history we already hold complete".
+    # find_gaps() cannot: it compares consecutive stored candles, so an outage
+    # that is still ongoing has no right-hand candle and reports no gap at all.
+    try:
+        import os
+        import time
+
+        from sqlalchemy import text as _text
+
+        from app.services.kline_coverage import (
+            DEGRADED_STATUSES,
+            INTERVAL_MS,
+            coverage_status,
+        )
+
+        interval = os.environ.get("MARKET_DATA_INTERVAL", "4h")
+        pair = os.environ.get("KLINE_COVERAGE_PAIR", "BTCUSDT")
+        window_days = int(os.environ.get("KLINE_COVERAGE_DAYS", "30"))
+        now_ms = int(time.time() * 1000)
+        window_start = now_ms - window_days * 86_400_000
+
+        row = await db.execute(
+            _text(
+                'SELECT COUNT(*), MIN(open_time_ms), MAX(open_time_ms) FROM klines '
+                'WHERE pair = :pair AND "interval" = :interval '
+                'AND open_time_ms >= :window_start'
+            ),
+            {"pair": pair, "interval": interval, "window_start": window_start},
+        )
+        stored, oldest, newest = row.one()
+        coverage = coverage_status(
+            stored_bars=stored,
+            oldest_open_time_ms=oldest,
+            newest_open_time_ms=newest,
+            interval=interval,
+            window_start_ms=window_start,
+            now_ms=now_ms,
+        )
+        coverage["pair"] = pair
+        coverage["window_days"] = window_days
+        health_status["components"]["klines_coverage"] = coverage
+        if coverage["status"] in DEGRADED_STATUSES:
+            health_status["status"] = "degraded"
+    except Exception as e:
+        health_status["components"]["klines_coverage"] = {
+            "status": "unknown",
+            "message": f"Kline coverage could not be determined: {str(e)}"
+        }
+
     return health_status
 
 @router.get("/ready")
