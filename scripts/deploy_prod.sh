@@ -27,11 +27,24 @@ for i in $(seq 1 30); do
   sleep 2
 done
 
-live_sha=$(docker compose -f docker-compose.prod.yml exec -T api python -c \
-  "from app.core.config import settings; print(settings.GIT_SHA)")
-echo "live api git_sha: ${live_sha}"
-if [ "$live_sha" != "$GIT_SHA" ]; then
-  echo "DEPLOY MISMATCH: built ${GIT_SHA} but api reports ${live_sha}" >&2
-  exit 1
+# Only the api image bakes GIT_SHA, so its reported SHA proves nothing about a
+# deploy that left api alone. Checking it anyway produced a DEPLOY MISMATCH on
+# a successful `deploy_prod.sh dashboard`, and a deploy tool that cries wolf
+# gets ignored.
+deployed_api=false
+for service in "${SERVICES[@]}"; do
+  [ "$service" = "api" ] && deployed_api=true
+done
+
+if [ "$deployed_api" = true ]; then
+  live_sha=$(docker compose -f docker-compose.prod.yml exec -T api python -c \
+    "from app.core.config import settings; print(settings.GIT_SHA)")
+  echo "live api git_sha: ${live_sha}"
+  if [ "$live_sha" != "$GIT_SHA" ]; then
+    echo "DEPLOY MISMATCH: built ${GIT_SHA} but api reports ${live_sha}" >&2
+    exit 1
+  fi
+else
+  echo "skipping live-SHA verification: api not among deployed services (${SERVICES[*]}); only the api image carries GIT_SHA"
 fi
 echo "deploy ok"
