@@ -11,6 +11,11 @@ SERVICES=("${@:-api dashboard}")
 
 git pull --quiet origin main
 export GIT_SHA="$(git rev-parse --short HEAD)"
+
+# Refuse to ship a commit CI did not pass. Stdlib only, so the VPS system
+# python3 is enough. Override with ALLOW_RED_CI=1 when you must.
+python3 scripts/ci_gate.py --sha "$(git rev-parse HEAD)"
+
 echo "deploying ${SERVICES[*]} at ${GIT_SHA}"
 
 docker compose -f docker-compose.prod.yml build "${SERVICES[@]}"
