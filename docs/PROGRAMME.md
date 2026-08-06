@@ -64,6 +64,7 @@ output referenced from the design docs.
 | v1.2.0 | R13 S1: guard evaluation returns structured data | #27 |
 | v1.3.0 | R4 S1: kline coverage becomes a health component | #48 |
 | v1.4.0 | R17 S1: model registry nightly backup | #45 |
+| v1.4.1 | CI gate authenticates by default; rate limit named | #52 |
 
 Open slices: #22-#26 (R5 S2-S6), #28-#33 (R13 S2-S7).
 
@@ -89,7 +90,7 @@ doc in `docs/design/`, and have slice issues with acceptance criteria.
 | R16 API key restrictions | `R16-*.md` | 3 | |
 | R17 backup coverage | `R17-backup-coverage.md` | 3 | S1 (v1.4.0) |
 
-50 slice issues total, 4 shipped. Every remaining slice is designed to be
+50 slice issues total, 5 shipped (4 slices plus the #52 tooling fix). Every remaining slice is designed to be
 testable and valuable WITHOUT live Binance access, so the geo-block does not
 block delivery.
 
