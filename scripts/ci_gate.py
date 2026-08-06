@@ -20,8 +20,10 @@ import argparse
 import json
 import os
 import sys
+import subprocess
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from typing import Callable, List, Optional, Tuple
 
 GREEN = "green"
@@ -29,6 +31,7 @@ RED = "red"
 PENDING = "pending"
 MISSING = "missing"
 UNREACHABLE = "unreachable"
+RATE_LIMITED = "rate_limited"
 
 DEFAULT_REPO = "fahdi/ai-forecasting"
 
@@ -70,6 +73,58 @@ def evaluate_check_runs(
     return GREEN, f"{len(passed)} CI job(s) passed"
 
 
+def _gh_cli_token() -> Optional[str]:
+    """The token the gh CLI already holds, if gh is installed and logged in."""
+    result = subprocess.run(
+        ["gh", "auth", "token"], capture_output=True, text=True, timeout=10
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def resolve_token(gh_token=_gh_cli_token) -> Optional[str]:
+    """A GitHub token from the environment, else from the gh CLI.
+
+    Anonymous API access is 60 requests per hour per IP, which a busy session
+    exhausts; the gate then refuses green commits. The VPS has no gh installed,
+    so returning None and going anonymous must stay valid.
+    """
+    token = (os.environ.get("GITHUB_TOKEN") or "").strip()
+    if token:
+        return token
+    try:
+        token = (gh_token() or "").strip()
+    except Exception:
+        return None
+    return token or None
+
+
+def classify_fetch_error(exc: BaseException) -> Tuple[str, str]:
+    """Turn a failed fetch into (status, message).
+
+    A rate limit is not an outage, and saying "could not reach GitHub" when the
+    real answer is "you asked too often" sends people looking in the wrong
+    place. Both still block: an answer we could not obtain is not a pass.
+    """
+    code = getattr(exc, "code", None)
+    if code == 403:
+        detail = ""
+        headers = getattr(exc, "headers", None)
+        reset = headers.get("X-RateLimit-Reset") if headers else None
+        if reset:
+            try:
+                when = datetime.fromtimestamp(int(reset), tz=timezone.utc)
+                detail = f", resets at {when.isoformat()}"
+            except (TypeError, ValueError):
+                detail = ""
+        return (
+            RATE_LIMITED,
+            "GitHub API rate limit exhausted"
+            f"{detail}. Anonymous access allows 60 requests per hour; set "
+            "GITHUB_TOKEN (for example GITHUB_TOKEN=$(gh auth token)) to raise it.",
+        )
+    return UNREACHABLE, f"could not reach GitHub: {exc}"
+
+
 def fetch_check_runs(sha: str, repo: str = DEFAULT_REPO) -> List[dict]:
     """Check runs for one commit. The repo is public, so a token is optional;
     GITHUB_TOKEN is used when set to avoid the anonymous rate limit."""
@@ -77,7 +132,7 @@ def fetch_check_runs(sha: str, repo: str = DEFAULT_REPO) -> List[dict]:
         f"https://api.github.com/repos/{repo}/commits/{sha}/check-runs",
         headers={"Accept": "application/vnd.github+json", "User-Agent": "aif-ci-gate"},
     )
-    token = os.environ.get("GITHUB_TOKEN")
+    token = resolve_token()
     if token:
         request.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(request, timeout=15) as response:
@@ -91,11 +146,15 @@ def assert_ci_green(
 ) -> None:
     """Exit nonzero unless `sha` has a green CI run, unless overridden."""
     try:
-        check_runs, error = fetch(sha), None
-    except Exception as exc:  # network, HTTP, malformed JSON — all unproven
-        check_runs, error = None, str(exc)
+        check_runs, error, error_status = fetch(sha), None, None
+    except Exception as exc:  # network, HTTP, malformed JSON: all unproven
+        check_runs = None
+        error_status, error = classify_fetch_error(exc)
 
-    verdict, reason = evaluate_check_runs(check_runs, error=error)
+    if error is not None:
+        verdict, reason = error_status, error
+    else:
+        verdict, reason = evaluate_check_runs(check_runs, error=None)
 
     if verdict == GREEN:
         print(f"ci gate: {sha} is green ({reason})")
