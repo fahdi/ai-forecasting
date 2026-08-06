@@ -37,7 +37,7 @@ from freqtrade.strategy import DecimalParameter, IStrategy
 # both under freqtrade and under plain pytest.
 sys.path.append(str(Path(__file__).parent))
 
-from decision import evaluate_entry  # noqa: E402
+from decision import evaluate_entry, evaluate_exit  # noqa: E402
 from signal_client import SignalClient  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -177,15 +177,15 @@ class EnsembleSignalStrategy(IStrategy):
         dataframe["exit_long"] = 0
         try:
             last = dataframe.iloc[-1]
-            signal = self.signal_client.get_signal(metadata["pair"], last["date"])
-            # Exiting is the safe direction, so a stale "flat" still exits.
-            if (
-                signal is not None
-                and signal.get("direction") == "flat"
-                and isinstance(signal.get("confidence"), (int, float))
-                and signal["confidence"] >= self.exit_confidence_threshold
-            ):
+            pair = metadata["pair"]
+            signal = self.signal_client.get_signal(pair, last["date"])
+            # evaluate_exit ignores staleness on purpose (R9): exiting is the
+            # safe direction, so a stale "flat" still closes the position.
+            result = evaluate_exit(signal, self.exit_confidence_threshold)
+            if result.decision == "exited":
                 dataframe.iloc[-1, dataframe.columns.get_loc("exit_long")] = 1
+            else:
+                logger.info("%s: no exit (reason=%s)", pair, result.reason)
         except Exception:
             logger.exception(
                 "Exit evaluation failed for %s — leaving exits to stop/trailing/max-hold",

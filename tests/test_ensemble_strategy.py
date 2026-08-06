@@ -9,6 +9,7 @@ Guard logic is tested with a fake SignalClient — no network. Run with the
 """
 
 import json
+import logging
 import sys
 from datetime import timedelta
 from pathlib import Path
@@ -28,6 +29,7 @@ sys.path.insert(0, str(STRATEGY_DIR))
 # of breaking collection) when run from the main app venv.
 pytest.importorskip("freqtrade", reason="requires the .venv-freqtrade environment")
 
+from decision import ExitDecision  # noqa: E402
 from EnsembleSignalStrategy import EnsembleSignalStrategy  # noqa: E402
 from signal_client import SignalClient  # noqa: E402
 
@@ -186,6 +188,32 @@ class TestExit:
     def test_exit_does_not_raise_on_api_failure(self, strategy):
         dataframe = run_exit(strategy, RaisingSignalClient())
         assert dataframe["exit_long"].sum() == 0
+
+    def test_no_exit_without_signal(self, strategy):
+        dataframe = run_exit(strategy, FakeSignalClient(None))
+        assert dataframe["exit_long"].sum() == 0
+
+    def test_stale_confident_flat_still_exits(self, strategy):
+        # R9 asymmetry: staleness blocks entry but must never block an exit.
+        signal = good_signal(direction="flat", confidence=0.7, stale=True)
+        dataframe = run_exit(strategy, FakeSignalClient(signal))
+        assert dataframe["exit_long"].iloc[-1] == 1
+
+    def test_exit_delegates_to_evaluate_exit(self, strategy, monkeypatch):
+        monkeypatch.setattr(
+            "EnsembleSignalStrategy.evaluate_exit",
+            lambda signal, threshold: ExitDecision("exited", "exit_signal", {}),
+        )
+        dataframe = run_exit(strategy, FakeSignalClient(good_signal(direction="long")))
+        assert dataframe["exit_long"].iloc[-1] == 1
+
+    def test_hold_reason_is_logged(self, strategy, caplog):
+        caplog.set_level(logging.INFO)
+        run_exit(strategy, FakeSignalClient(good_signal(direction="flat", confidence=0.5)))
+        assert any(
+            "BTC/USDT" in record.getMessage() and "reason=hold" in record.getMessage()
+            for record in caplog.records
+        )
 
     def test_max_hold_custom_exit_after_5_days(self, strategy):
         trade = MagicMock()
